@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 아래 두 이메일만 가계부를 읽고 쓸 수 있습니다. 실제 로그인 이메일로 바꿔 주세요.
+    match /households/{hid}/{document=**} {
+      allow read, write: if request.auth != null
+        && request.auth.token.email in ['me@example.com', 'partner@example.com'];
+    }
+  }
+}
