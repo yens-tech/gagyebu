@@ -178,6 +178,27 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .scan-msg.ok{color:var(--accent)} .scan-msg.bad{color:var(--over)}
 .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--accent);border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
+.scan2{display:flex;gap:8px}
+.scan2 .scan{flex:1;padding:12px;gap:10px}
+.cap-h{font-size:18px;font-weight:700;text-align:center}
+.cap-info{display:grid;justify-items:center;gap:10px;padding:48px 0;color:var(--muted);text-align:center}
+.cap-sum{padding:10px 4px;font-size:14px;color:var(--muted)}
+.cap-sum b{color:var(--fg)}
+.cap-list{display:grid;gap:0;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-top:6px}
+.crec{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:12px;align-items:start}
+.crec+.crec{border-top:1px solid var(--line)}
+.crec.off{opacity:.5}
+.ck{width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--on-accent);margin-top:4px}
+.ck.on{background:var(--accent);border-color:var(--accent)}
+.ck svg.i{width:16px;height:16px;stroke-width:2.4}
+.crec-b{display:grid;gap:6px;min-width:0}
+.crec-r{display:flex;gap:6px;align-items:center;min-width:0}
+.crec input,.crec select{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:7px 9px;font-size:15px;min-width:0;color:var(--fg)}
+.crec .m{flex:1}
+.crec .a{width:104px;text-align:right}
+.crec .dt{width:140px}
+.crec select{flex:1}
+.flag{font-size:12px;color:var(--warn)}
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:99px;font-size:14px;z-index:60;transition:opacity .2s}
 .login{min-height:80vh;display:grid;align-content:center;gap:12px;max-width:360px;margin:0 auto}
 .login h1{margin:0 0 4px;font-size:24px}
@@ -232,6 +253,7 @@ const IC = {
   list:"M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01", chart:"M5 20V10M10 20V4M15 20v-8M20 20v-5",
   gear:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
   home:"M4 11l8-7 8 7v9h-5v-6H9v6H4z",
+  check:"M5 12.5l4.5 4.5L19 7",
   camera:"M4 8h3l1.5-2.5h7L17 8h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"
 };
 const svg = k => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${IC[k]||IC.tag}"/></svg>`;
@@ -280,6 +302,7 @@ const LocalStore = {
   },
   persist(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({txs:S.txs, settings:S.settings})); }catch(e){} },
   async put(tx){ const i=S.txs.findIndex(t=>t.id===tx.id); if(i>=0) S.txs[i]=tx; else S.txs.push(tx); this.persist(); render(); },
+  async putMany(txs){ S.txs.push(...txs); this.persist(); render(); },
   async remove(id){ S.txs=S.txs.filter(t=>t.id!==id); this.persist(); render(); },
   async removeMany(ids){ const set=new Set(ids); S.txs=S.txs.filter(t=>!set.has(t.id)); this.persist(); render(); },
   async saveSettings(s){ S.settings=s; this.persist(); render(); }
@@ -306,6 +329,7 @@ const FireStore = {
     this.unsub.push(this.home().onSnapshot(d=>{ const s=d.exists?d.data().settings:null; if(s) S.settings={...structuredClone(DEFAULT_SETTINGS),...s}; render(); }, ()=>{}));
   },
   async put(tx){ tx.by=S.user?.email||''; await this.home().collection('tx').doc(tx.id).set(tx); },
+  async putMany(txs){ const b=this.db.batch(); txs.forEach(t=>{ t.by=S.user?.email||''; b.set(this.home().collection('tx').doc(t.id), t); }); await b.commit(); },
   async remove(id){ await this.home().collection('tx').doc(id).delete(); },
   async removeMany(ids){ const b=this.db.batch(); ids.forEach(id=>b.delete(this.home().collection('tx').doc(id))); await b.commit(); },
   async saveSettings(s){ await this.home().set({settings:s},{merge:true}); },
@@ -491,9 +515,11 @@ function drawSheet(){
     <div class="sheet-top"><span></span>
       <div class="seg" role="tablist"><button class="${F.type==='in'?'on':''}" data-type="in">입금</button><span style="color:var(--line)">/</span><button class="${F.type==='out'?'on':''}" data-type="out">지출</button></div>
       <button class="iconbtn" data-act="close" aria-label="닫기">${svg('close')}</button></div>
-    ${F.type==='out'&&!F.isEdit?`<button class="scan" data-act="scan" ${F.scan==='reading'?'disabled':''}>${F.scan==='reading'?'<span class="spin"></span>':svg('camera')}
-      <span><b>${F.scan==='reading'?'영수증 읽는 중…':'영수증 사진으로 입력'}</b><span>${F.scan==='reading'?'10초 정도 걸려요':'찍거나 앨범에서 고르면 금액·날짜·가게가 채워져요'}</span></span></button>
-      <input type="file" id="f-photo" accept="image/*" hidden>`:''}
+    ${F.type==='out'&&!F.isEdit?`<div class="scan2">
+      <button class="scan" data-act="scan" ${F.scan==='reading'?'disabled':''}>${F.scan==='reading'?'<span class="spin"></span>':svg('camera')}
+        <span><b>${F.scan==='reading'?'읽는 중…':'영수증 사진'}</b><span>${F.scan==='reading'?'10초 정도 걸려요':'한 건 자동 입력'}</span></span></button>
+      <button class="scan" data-act="caps">${svg('list')}<span><b>결제내역 캡처</b><span>여러 건 한 번에</span></span></button></div>
+      <input type="file" id="f-photo" accept="image/*" hidden><input type="file" id="f-caps" accept="image/*" multiple hidden>`:''}
     ${F.scanMsg?`<div class="scan-msg ${F.scanOk?'ok':'bad'}">${esc(F.scanMsg)}</div>`:''}
     <div class="row">${svg('cal')}<input type="date" id="f-date" value="${F.date}" aria-label="날짜"></div>
     <div class="row">${svg('won')}<input id="f-amt" class="amount-in num" inputmode="numeric" placeholder="0" value="${F.amount?won(F.amount):''}" aria-label="금액"><span style="color:var(--muted)">원</span></div>
@@ -512,6 +538,7 @@ function drawSheet(){
   $('#f-date').onchange=e=>F.date=e.target.value;
   $('#f-memo').oninput=e=>{ F.memo=e.target.value; drawSugg(); };
   const ph=$('#f-photo'); if(ph) ph.onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) scanReceipt(f); };
+  const pc=$('#f-caps'); if(pc) pc.onchange=e=>{ const fs=[...(e.target.files||[])]; if(fs.length){ const who=F.who; closeSheet(); startCapture(fs, who); } };
 }
 function drawSugg(){
   const box=$('#sugg'); if(!box) return;
@@ -549,11 +576,11 @@ async function shrink(file){
 }
 const blobToB64 = b => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); });
 function parseJson(t){ t=String(t||'').trim().replace(/^```(json)?/,'').replace(/```$/,''); const a=t.indexOf('{'), b=t.lastIndexOf('}'); return JSON.parse(t.slice(a,b+1)); }
-async function readWithGemini(blob, key){
+async function readWithGemini(blob, key, prompt=receiptPrompt()){
   const model = CFG.geminiModel || 'gemini-flash-latest';
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ contents:[{parts:[{text:receiptPrompt()},{inline_data:{mime_type:'image/jpeg', data: await blobToB64(blob)}}]}],
+    body: JSON.stringify({ contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg', data: await blobToB64(blob)}}]}],
       generationConfig:{ responseMimeType:'application/json', temperature:0 } })
   });
   if(r.status===400||r.status===403) throw {code:'key'};
@@ -562,12 +589,15 @@ async function readWithGemini(blob, key){
   const j = await r.json();
   return parseJson(j?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join(''));
 }
-async function readWithClaude(blob){
+async function readWithClaude(blob, prompt=receiptPrompt()){
   const sample = window.claude ? await window.claude.use('sample') : null;
   if(!sample) throw {code:'nokey'};
-  try{ return await sample.json(receiptPrompt(), {images:[blob], modelTier:'quick', cache:false}); }
+  try{ return await sample.json(prompt, {images:[blob], modelTier:prompt===receiptPrompt()?'quick':'default', cache:false}); }
   catch(e){ throw {code: e.code==='not_granted'?'denied': e.code==='rate_limited'?'limit':'net'}; }
 }
+const READ_MSGS={ key:'Gemini API 키가 맞지 않아요. 설정에서 키를 다시 확인해 주세요.', limit:'오늘 무료 사용량을 다 썼어요. 직접 입력해 주세요.',
+  nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini API 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
+const readImage = (blob, prompt) => { const key=geminiKey(); return key && window.STANDALONE ? readWithGemini(blob,key,prompt) : readWithClaude(blob,prompt); };
 async function scanReceipt(file){
   F.scan='reading'; F.scanMsg=''; drawSheet();
   const blob = await shrink(file);
@@ -576,8 +606,7 @@ async function scanReceipt(file){
   catch(e){ err=e&&e.code||'net'; }
   if(!F) return; // 그 사이 닫음
   F.scan='';
-  const msgs={ key:'Gemini API 키가 맞지 않아요. 설정에서 키를 다시 확인해 주세요.', limit:'오늘 무료 사용량을 다 썼어요. 직접 입력해 주세요.',
-    nokey:'영수증을 읽으려면 설정에서 Gemini API 키를 넣어 주세요.', denied:'영수증 읽기를 허용하지 않아서 읽지 못했어요.', net:'영수증을 읽지 못했어요. 인터넷 연결을 확인하고 다시 찍어 주세요.' };
+  const msgs=READ_MSGS;
   if(err){ F.scanOk=false; F.scanMsg=msgs[err]||msgs.net; drawSheet(); return; }
   if(!res || res.readable===false || !(+res.total>0)){ F.scanOk=false; F.scanMsg='금액을 찾지 못했어요. 영수증 전체가 밝게 나오도록 다시 찍어 주세요.'; drawSheet(); return; }
   F.amount=Math.round(+res.total);
@@ -588,11 +617,103 @@ async function scanReceipt(file){
   drawSheet();
 }
 
+/* ---------------- 결제내역 캡처 (여러 건) ---------------- */
+function capturePrompt(){
+  const now=new Date(), y=now.getFullYear(), m=now.getMonth()+1;
+  const outc=catsOf('out').map(([k,l])=>`${k}=${l}`).join(', '), inc=catsOf('in').map(([k,l])=>`${k}=${l}`).join(', ');
+  return `이 이미지는 한국 카드사·은행·간편결제 앱의 결제/거래 내역 화면 캡처입니다. 화면에 보이는 거래를 빠짐없이 읽어 JSON 하나로만 답하세요.
+{"items":[{"date":"YYYY-MM-DD","merchant":"가게 또는 상대방 이름","amount":숫자(원, 양수, 쉼표 없이),"type":"out 또는 in","kind":"pay|cancel|card_bill|transfer|other","category":"키"}]}
+규칙:
+- 날짜가 묶음 제목(예: 11.05 목, 오늘, 어제)으로만 있으면 그 아래 거래들에 그 날짜를 쓰세요. 오늘은 ${ymd(now)}입니다. 연도가 없으면 ${y}년, 단 ${m}월보다 뒤의 달이면 ${y-1}년.
+- 결제·출금은 type "out", 입금·환불은 type "in". 승인취소·결제취소는 kind "cancel", type "in".
+- 카드대금·카드 결제대금 출금은 kind "card_bill". 사람 이름으로 보내거나 받은 이체, 내 계좌 간 이동은 kind "transfer".
+- 위아래가 잘려 금액이나 가게가 안 보이는 줄은 빼세요. 잔액·누적금액·한도·포인트는 거래가 아니니 빼세요.
+- category: 지출은 ${outc} 중 하나, 수입은 ${inc} 중 하나.
+- 거래 내역 화면이 아니면 {"items":[]}.`;
+}
+const norm = s => String(s||'').replace(/\(주\)|주식회사|㈜|\s|[·.,\-_()]/g,'').toLowerCase();
+const sameText = (a,b) => { a=norm(a); b=norm(b); if(!a||!b) return true; return a.includes(b)||b.includes(a)||a.slice(0,4)===b.slice(0,4); };
+function catFromHistory(merchant,type){ const n=norm(merchant); if(!n) return ''; const t=S.txs.find(x=>x.type===type&&!x.ex&&x.memo&&sameText(x.memo,merchant)&&norm(x.memo).slice(0,4)===n.slice(0,4)); return t?t.cat:''; }
+
+let R=null;
+async function startCapture(files, who){
+  R={status:'reading', done:0, total:files.length, who:who||S.lastWho||'us', items:[], removed:0, err:''};
+  $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture();
+  const raw=[]; const errs=[];
+  for(const f of files){
+    try{ const res=await readImage(await shrink(f), capturePrompt()); (res&&Array.isArray(res.items)?res.items:[]).forEach(x=>raw.push(x)); }
+    catch(e){ errs.push(e&&e.code||'net'); }
+    if(!R) return; R.done++; drawCapture();
+  }
+  const today=ymd(new Date()), seen=new Set(), outKeys=catsOf('out').map(c=>c[0]), inKeys=catsOf('in').map(c=>c[0]);
+  for(const x of raw){
+    const amount=Math.round(Math.abs(+String(x.amount).replace(/[^\d.-]/g,'')));
+    if(!(amount>0)) continue;
+    const kind=x.kind||'pay';
+    const type = kind==='cancel' ? 'in' : (x.type==='in'?'in':'out');
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(x.date||'') ? x.date : today;
+    const merchant=String(x.merchant||'').trim().slice(0,40);
+    const key=[date,amount,type,norm(merchant)].join('|');
+    if(seen.has(key)){ R.removed++; continue; }   // 캡처끼리 겹친 내역
+    seen.add(key);
+    const same=S.txs.filter(t=>!t.ex&&t.date===date&&t.amount===amount&&t.type===type);
+    if(same.some(t=>sameText(t.memo,merchant))){ R.removed++; continue; }   // 이미 가계부에 있는 내역
+    let cat = kind==='cancel' ? 'refund' : (catFromHistory(merchant,type) || x.category);
+    if(!(type==='in'?inKeys:outKeys).includes(cat)) cat = type==='in'?'etc_in':'etc';
+    const it={date,amount,type,merchant,cat,on:true,flag:''};
+    if(kind==='card_bill'){ it.on=false; it.flag='카드대금이라 지출에서 뺐어요 (카드 결제 때 이미 기록돼요)'; }
+    else if(kind==='transfer'){ it.on=false; it.flag='이체라서 뺐어요. 실제 지출이면 체크하세요'; }
+    else if(same.length){ it.on=false; it.flag='같은 날 같은 금액 내역이 이미 있어요'; }
+    else if(kind==='cancel'){ it.flag='승인취소라 환급으로 넣어요'; }
+    R.items.push(it);
+  }
+  R.items.sort((a,b)=>b.date.localeCompare(a.date));
+  R.status='review';
+  if(!R.items.length) R.err = errs.length===files.length ? (READ_MSGS[errs[0]]||READ_MSGS.net) : R.removed ? '' : '캡처에서 거래 내역을 찾지 못했어요. 금액과 가게 이름이 보이게 다시 캡처해 주세요.';
+  else if(errs.length) R.err=`${errs.length}장은 읽지 못했어요. ${READ_MSGS[errs[0]]||''}`;
+  drawCapture();
+}
+function drawCapture(){
+  if(!R) return;
+  const names=S.settings.names, n=R.items.filter(i=>i.on).length;
+  let body='';
+  if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small">한 장에 10초 정도 걸려요</span></div>`;
+  else {
+    body=`<div class="cap-sum"><b>${R.items.length}건</b>을 찾았어요${R.removed?` · 중복 <b>${R.removed}건</b>은 뺐어요`:''}</div>`;
+    if(R.err) body+=`<div class="scan-msg bad" style="padding:0 4px 8px">${esc(R.err)}</div>`;
+    if(R.items.length){
+      body+=`<div class="small" style="padding:4px 4px 0">누가 쓴 내역인가요?</div><div class="people" style="border:0;padding-top:8px">${[['a',names.a],['b',names.b],['us','우리']].map(([k,l])=>`<button class="pchip ${R.who===k?'on':''}" data-cwho="${k}">${esc(l)}</button>`).join('')}</div>`;
+      body+=`<div class="cap-list">${R.items.map((it,i)=>`<div class="crec ${it.on?'':'off'}">
+        <button class="ck ${it.on?'on':''}" data-ci="${i}" aria-label="${it.on?'빼기':'넣기'}">${it.on?svg('check'):''}</button>
+        <div class="crec-b">
+          <div class="crec-r"><input class="m" data-cf="merchant" data-i="${i}" value="${esc(it.merchant)}" aria-label="가게"><input class="a num" data-cf="amount" data-i="${i}" inputmode="numeric" value="${won(it.amount)}" aria-label="금액"></div>
+          <div class="crec-r"><input class="dt" type="date" data-cf="date" data-i="${i}" value="${it.date}" aria-label="날짜">
+            <select data-cf="cat" data-i="${i}" aria-label="카테고리">${catsOf(it.type).map(([k,l])=>`<option value="${k}" ${k===it.cat?'selected':''}>${it.type==='in'?'입금 · ':''}${esc(l)}</option>`).join('')}</select></div>
+          ${it.flag?`<div class="flag">${esc(it.flag)}</div>`:''}
+        </div></div>`).join('')}</div>`;
+    }
+  }
+  $('#sheet').innerHTML=`<div class="sheet-in">
+    <div class="sheet-top"><span></span><div class="cap-h">결제내역 캡처</div><button class="iconbtn" data-act="cap-close" aria-label="닫기">${svg('close')}</button></div>${body}</div>
+    ${R.status==='review'?`<div class="save-bar"><div class="save-bar-in">${R.items.length?`<button class="btn primary" data-act="cap-save" ${n?'':'disabled'}>${n}건 추가</button>`:`<button class="btn" data-act="cap-close">닫기</button>`}</div></div>`:''}`;
+  document.querySelectorAll('[data-cf]').forEach(el=>el.onchange=e=>{ const it=R.items[+el.dataset.i], f=el.dataset.cf;
+    if(f==='amount'){ const v=+el.value.replace(/\D/g,''); it.amount=v; el.value=v?won(v):''; } else it[f]=el.value; });
+}
+function closeCapture(){ R=null; $('#sheet').hidden=true; document.body.style.overflow=''; }
+async function saveCapture(){
+  const base=Date.now(), txs=R.items.filter(i=>i.on&&i.amount>0).map((it,k)=>({id:uid(), type:it.type, date:it.date, amount:it.amount, who:R.who, cat:it.cat, memo:it.merchant, createdAt:base-k, cap:true}));
+  if(!txs.length) return;
+  try{ await store().putMany(txs); S.lastWho=R.who; S.month=txs[0].date.slice(0,7); closeCapture(); toast(`${txs.length}건을 추가했어요`); }
+  catch(e){ R.err='저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'; drawCapture(); }
+}
+
 /* ---------------- 이벤트 ---------------- */
 document.addEventListener('click', async e=>{
   const b=e.target.closest('button'); if(!b) return;
   const d=b.dataset;
   if(d.tab){ S.tab=d.tab; render(); window.scrollTo(0,0); return; }
+  if(R && d.ci!==undefined){ const it=R.items[+d.ci]; it.on=!it.on; drawCapture(); return; }
+  if(R && d.cwho){ R.who=d.cwho; drawCapture(); return; }
   if(d.edit){ const t=S.txs.find(x=>x.id===d.edit); if(t) openSheet(t); return; }
   if(F && !$('#sheet').hidden){
     if(d.type){ if(F.type!==d.type){ F.type=d.type; F.cat=''; } drawSheet(); return; }
@@ -606,6 +727,9 @@ document.addEventListener('click', async e=>{
   switch(d.act){
     case 'add': openSheet(); break;
     case 'scan': $('#f-photo')?.click(); break;
+    case 'caps': $('#f-caps')?.click(); break;
+    case 'cap-close': closeCapture(); break;
+    case 'cap-save': saveCapture(); break;
     case 'close': closeSheet(); break;
     case 'save': saveTx(); break;
     case 'del': if(!F.armed){ F.armed=true; drawSheet(); } else { try{ await store().remove(F.id); closeSheet(); toast('삭제했어요'); }catch(e){ $('#f-err').textContent='삭제하지 못했어요. 다시 시도해 주세요.'; } } break;
