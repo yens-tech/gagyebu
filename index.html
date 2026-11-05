@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-18';
+const APP_VERSION='2026.11.05-19';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -707,7 +707,7 @@ async function shrink(file){
 const blobToB64 = b => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); });
 function parseJson(t){ t=String(t||'').trim().replace(/^```(json)?/,'').replace(/```$/,''); const a=t.indexOf('{'), b=t.lastIndexOf('}'); return JSON.parse(t.slice(a,b+1)); }
 const GEM_MODEL_LS='gagyebu.geminiModel', GEM_LIST_LS='gagyebu.geminiModels', GEM_BUSY_LS='gagyebu.geminiBusy';
-function markBusy(m){ try{ const b=JSON.parse(localStorage.getItem(GEM_BUSY_LS)||'{}'); b[m]=Date.now(); localStorage.setItem(GEM_BUSY_LS, JSON.stringify(b)); }catch(e){} }
+function markBusy(m, ms=600000){ try{ const b=JSON.parse(localStorage.getItem(GEM_BUSY_LS)||'{}'); b[m]=Date.now()+ms-600000; localStorage.setItem(GEM_BUSY_LS, JSON.stringify(b)); }catch(e){} }
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 async function tfetch(url, opts={}, ms=20000){ const c=new AbortController(); const t=setTimeout(()=>c.abort(), ms);
   try{ return await fetch(url, {...opts, signal:c.signal}); } catch(e){ if(c.signal.aborted) throw {code:'timeout'}; throw e; } finally{ clearTimeout(t); } }
@@ -753,7 +753,7 @@ async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}
           body: JSON.stringify({ contents:[{parts:[{text:prompt},{inline_data:{mime_type:blob.type||'image/jpeg', data:b64}}]}],
             generationConfig:Object.assign({ responseMimeType:'application/json', temperature:0 }, thinkCfg(model)?{thinkingConfig:thinkCfg(model)}:{}) })
         }, 20000);
-      }catch(e){ if(e&&e.code==='timeout'){ last={code:'timeout'}; markBusy(model); onStatus(`${model} 응답이 늦어서 다른 모델로 바꾸는 중…`); break; } last={code:'net'}; break; }
+      }catch(e){ if(e&&e.code==='timeout'){ last={code:'timeout'}; markBusy(model, 6*3600000); onStatus(`${model} 응답이 늦어서 다른 모델로 바꾸는 중…`); break; } last={code:'net'}; break; }
       let j=null; try{ j=await r.json(); }catch(e){}
       if(r.ok){
         const text=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
@@ -856,7 +856,8 @@ async function geminiTest(){
   let models; try{ try{ localStorage.removeItem(GEM_LIST_LS); }catch(e){} models=await listGeminiModels(key); lines[0]=`쓸 수 있는 모델: ${models.join(', ')}`; }
   catch(e){ lines[0]= e.code==='timeout' ? '모델 목록 응답이 없어요 (10초)' : e.code==='key' ? '키가 맞지 않아요. AI Studio에서 키를 다시 복사해 주세요.' : e.code==='net' ? 'Gemini 서버에 연결하지 못했어요.' : `모델 목록 실패: ${e.detail||e.code}`; show(); return; }
   show();
-  for(const m of models.slice(0,4)){
+  const ok=[], bad=[];
+  for(const m of models.slice(0,6)){
     const i=lines.push(`${m}: 확인 중…`)-1; show(); const t0=Date.now();
     try{
       const body={contents:[{parts:[{text:'다음 JSON만 답하세요: {"ok":true}'}]}], generationConfig:Object.assign({responseMimeType:'application/json',temperature:0}, thinkCfg(m)?{thinkingConfig:thinkCfg(m)}:{})};
@@ -865,9 +866,16 @@ async function geminiTest(){
       if(r.status===400 && /thinking/i.test(j?.error?.message||'')){ delete body.generationConfig.thinkingConfig; r=await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},20000); j=null; try{ j=await r.json(); }catch(e){} }
       const sec=((Date.now()-t0)/1000).toFixed(1);
       lines[i] = r.ok ? `${m}: 성공 (${sec}초)` : `${m}: 실패 ${r.status} ${(j?.error?.message||'').slice(0,120)}`;
-    }catch(e){ lines[i]= e&&e.code==='timeout' ? `${m}: 20초 동안 응답 없음` : `${m}: 연결 실패`; }
+      (r.ok?ok:bad).push({m, sec:+sec});
+    }catch(e){ lines[i]= e&&e.code==='timeout' ? `${m}: 20초 동안 응답 없음` : `${m}: 연결 실패`; bad.push({m}); }
     show();
   }
+  if(ok.length){
+    const order=[...ok.sort((a,b)=>a.sec-b.sec).map(x=>x.m), ...bad.map(x=>x.m)];
+    try{ localStorage.setItem(GEM_LIST_LS, JSON.stringify({at:Date.now(), list:order, tested:true})); localStorage.setItem(GEM_MODEL_LS, order[0]); localStorage.removeItem(GEM_BUSY_LS); }catch(e){}
+    bad.forEach(x=>markBusy(x.m, 6*3600000));
+    lines.push(`→ 앞으로 ${order[0]}부터 쓰고, 응답 없던 모델은 빼고 써요.`); show();
+  } else { lines.push('→ 성공한 모델이 없어요. 잠시 뒤 다시 확인하거나 OpenRouter·붙여넣기를 써 주세요.'); show(); }
 }
 
 async function orTest(){
