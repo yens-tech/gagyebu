@@ -123,7 +123,10 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .field label{font-size:13px;color:var(--muted)}
 .inp{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:11px 12px;font-size:16px}
 .inp:focus{outline:none;border-color:var(--accent)}
-input[type="date"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;box-sizing:border-box;display:block;min-height:44px}
+input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;width:100%;box-sizing:border-box;display:block;min-height:44px}
+input[type="time"]::-webkit-date-and-time-value{text-align:left;margin:0}
+.two>*{min-width:0}
+.inp:disabled{opacity:.45}
 input[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
 input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .field{min-width:0}
@@ -311,7 +314,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-35';
+const APP_VERSION='2026.11.05-36';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -676,22 +679,26 @@ function upcoming(days){ const out=[], d=new Date(); for(let i=0;i<=days;i++){ c
 function dLabel(date){ const n=Math.round((new Date(date+'T00:00')-new Date(ymd(new Date())+'T00:00'))/86400000); return n===0?'오늘':n===1?'내일':n>0?`D-${n}`:`${-n}일 전`; }
 function evRow(e, date){ const dt=new Date((date||e.date)+'T00:00');
   return `<button class="item" data-evedit="${esc(e.id)}"><span class="ic evic">${svg('cal')}</span>
-    <span class="item-t"><b>${esc(e.title)}</b><span>${date?`${dt.getMonth()+1}/${dt.getDate()} (${DOW[dt.getDay()]}) · `:''}${e.time?esc(e.time)+' · ':''}<span class="who">${esc(whoName(e.who||'us'))}</span>${e.yearly?'🔁 매년':''}${e.memo?' · '+esc(e.memo):''}</span></span>
+    <span class="item-t"><b>${esc(e.title)}</b><span>${date?`${dt.getMonth()+1}/${dt.getDate()} (${DOW[dt.getDay()]}) · `:''}${e.time?esc(e.time)+' · ':'시간 미정 · '}<span class="who">${esc(whoName(e.who||'us'))}</span>${e.yearly?'🔁 매년':''}${e.memo?' · '+esc(e.memo):''}</span></span>
     ${date?`<span class="amt small" style="color:var(--accent);font-weight:600">${dLabel(date)}</span>`:''}</button>`; }
 let EV=null;
-function openEvent(e, date){ EV=e?{...e, isEdit:true}:{id:uid(), date:date||ymd(new Date()), time:'', title:'', who:'us', yearly:false, memo:'', remind:true}; EV.armed=false; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawEvent(); setTimeout(()=>{ if(!EV.isEdit) $('#ev-title')?.focus(); },50); }
+function openEvent(e, date){ EV=e?{...e, isEdit:true}:{id:uid(), date:date||ymd(new Date()), time:'', title:'', who:'us', yearly:false, memo:'', remind:true}; EV.noTime=!EV.time; EV.armed=false; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawEvent(); setTimeout(()=>{ if(!EV.isEdit) $('#ev-title')?.focus(); },50); }
 function drawEvent(){ const names=S.settings.names;
   $('#sheet').innerHTML=`<div class="sheet-in"><div class="sheet-top"><span></span><div class="cap-h">${EV.isEdit?'일정 고치기':'일정 추가'}</div><button class="iconbtn" data-act="ev-close" aria-label="닫기">${svg('close')}</button></div>
     <div class="card" style="margin-top:6px">
       <div class="field"><label for="ev-title">일정</label><input class="inp" id="ev-title" value="${esc(EV.title)}" placeholder="예: 엄마 생신, 치과, 결혼기념일"></div>
-      <div class="field"><label>날짜 · 시간</label><div class="two"><input class="inp" type="date" id="ev-date" value="${EV.date}"><input class="inp" type="time" id="ev-time" value="${esc(EV.time||'')}"></div></div>
+      <div class="field"><label for="ev-date">날짜</label><input class="inp" type="date" id="ev-date" value="${EV.date}"></div>
+      <div class="field"><label for="ev-time">시간</label><div class="two" style="grid-template-columns:1fr auto;align-items:center"><input class="inp" type="time" id="ev-time" value="${esc(EV.time||'')}" ${EV.noTime?'disabled':''}>
+        <label class="chk" style="white-space:nowrap"><input type="checkbox" id="ev-notime" ${EV.noTime?'checked':''}> 시간 미정</label></div></div>
       <div class="field"><label>누구 일정</label><span class="segm" style="align-self:start">${[['a',names.a],['b',names.b],['us','우리']].map(([k,l])=>`<button class="${EV.who===k?'on':''}" data-evwho="${k}">${esc(l)}</button>`).join('')}</span></div>
       <div class="field"><label class="chk"><input type="checkbox" id="ev-yearly" ${EV.yearly?'checked':''}> 매년 반복 (생일·기념일)</label></div>
       <div class="field"><label for="ev-memo">메모</label><input class="inp" id="ev-memo" value="${esc(EV.memo||'')}" placeholder="선택"></div>
       <div class="err" id="ev-err"></div></div></div>
     <div class="save-bar"><div class="save-bar-in">${EV.isEdit?`<button class="btn danger ${EV.armed?'armed':''}" data-act="ev-del">${EV.armed?'한 번 더 누르면 삭제':'삭제'}</button>`:''}<button class="btn primary" data-act="ev-save">저장</button></div></div>`;
+  bindEvForm();
 }
-function readEvForm(){ EV.title=$('#ev-title').value.trim(); EV.date=$('#ev-date').value; EV.time=$('#ev-time').value; EV.yearly=$('#ev-yearly').checked; EV.memo=$('#ev-memo').value.trim(); }
+function bindEvForm(){ const nt=$('#ev-notime'), ti=$('#ev-time'); if(nt&&ti){ nt.onchange=()=>{ ti.disabled=nt.checked; if(nt.checked) ti.value=''; else ti.focus(); }; ti.onchange=()=>{ if(ti.value) nt.checked=false; }; } }
+function readEvForm(){ EV.title=$('#ev-title').value.trim(); EV.date=$('#ev-date').value; EV.noTime=$('#ev-notime').checked; EV.time=EV.noTime?'':$('#ev-time').value; EV.yearly=$('#ev-yearly').checked; EV.memo=$('#ev-memo').value.trim(); }
 function closeEvent(){ EV=null; $('#sheet').hidden=true; document.body.style.overflow=''; render(); }
 
 function listView(){
