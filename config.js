@@ -6,7 +6,14 @@
 //  ② 비워 두면(firebase: null) 이 기기에만 저장되는 모드로 동작합니다.
 // ================================================================
 window.APP_CONFIG = {
-  firebase: null,
+  firebase: {
+    apiKey: "AIzaSyAYm1IUp4R0XSZjJWAttjLDKxZdzNsPnDs",
+    authDomain: "our-gagyebu-82fa6.firebaseapp.com",
+    projectId: "our-gagyebu-82fa6",
+    storageBucket: "our-gagyebu-82fa6.firebasestorage.app",
+    messagingSenderId: "791505003609",
+    appId: "1:791505003609:web:4cebf7fc17932526b27d48"
+  },
   // 예시:
   // firebase: {
   //   apiKey: "AIza....",
