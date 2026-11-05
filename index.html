@@ -185,6 +185,10 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .scan-msg.ok{color:var(--accent)} .scan-msg.bad{color:var(--over)}
 .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--accent);border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
+.fxbtn{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;margin:2px 0 6px;font-weight:600;color:var(--fg);background:var(--surface)}
+.fxbtn svg.i{color:var(--accent)}
+.fxbtn .small{margin-left:auto;font-weight:400}
+select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 .scan2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .scan2 .scan{flex-direction:column;align-items:center;text-align:center;padding:12px 6px;gap:6px;margin:6px 0 4px}
 .scan2 .scan b{font-size:14px}
@@ -285,7 +289,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-27';
+const APP_VERSION='2026.11.05-29';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -356,7 +360,7 @@ const IN_CATS = [['salary','월급'],['bonus','보너스'],['side','부수입'],
 const CFG = window.APP_CONFIG || {};
 const HAS_FB = !!(CFG.firebase && CFG.firebase.apiKey);
 const LS_KEY = 'gagyebu.v1';
-const DEFAULT_SETTINGS = { names:{a:'주영', b:'대현'}, budget:2600000, customCats:[], anniv:'2026-08-29' };
+const DEFAULT_SETTINGS = { names:{a:'주영', b:'대현'}, budget:2600000, customCats:[], anniv:'2026-08-29', fixed:[] };
 const S = {
   txs:[], notes:[], bookMode:'cal', settings:structuredClone(DEFAULT_SETTINGS), tab:'home',
   month: ym(new Date()), source: HAS_FB ? 'firebase' : 'local', user:null, ready:!HAS_FB, lastWho:'us'
@@ -684,6 +688,7 @@ function drawSheet(){
         <span><b>${F.scan==='reading'?'읽는 중…':'영수증'}</b><span>${F.scan==='reading'?'10초 정도':'사진 한 장'}</span></span></button>
       <button class="scan" data-act="caps">${svg('list')}<span><b>내역 캡처</b><span>여러 건 한 번에</span></span></button>
       <button class="scan" data-act="paste">${svg('memo')}<span><b>붙여넣기</b><span>복사한 글자로</span></span></button></div>
+      <button class="fxbtn" data-act="fx-open">${svg('refresh')}<span>고정지출 불러오기</span><span class="small">${(S.settings.fixed||[]).length}개 저장됨</span></button>
       <input type="file" id="f-photo" accept="image/*" hidden><input type="file" id="f-caps" accept="image/*" multiple hidden>
       <div class="small" style="padding:2px 4px 6px">사진은 AI가 읽고 저장되지 않아요. 카드번호·계좌번호·잔액은 안 보이게 잘라서 올려 주세요. 붙여넣기는 폰 안에서만 처리돼요.</div>`:''}
     ${F.scanMsg?`<div class="scan-msg ${F.scanOk?'ok':'bad'}">${esc(F.scanMsg)}</div>`:''}
@@ -697,6 +702,7 @@ function drawSheet(){
     <div class="err" id="f-err"></div>
   </div>
   <div class="save-bar"><div class="save-bar-in">
+    ${F.isEdit&&F.type==='out'?`<button class="btn" data-act="fx-from" style="flex:0 0 auto">고정지출로 저장</button>`:''}
     ${F.isEdit?`<button class="btn danger ${F.armed?'armed':''}" data-act="del">${F.armed?'한 번 더 누르면 삭제':'삭제'}</button>`:''}
     <button class="btn primary" data-act="save">${F.isEdit?'수정 저장':'저장'}</button></div></div>`;
   drawSugg();
@@ -1100,6 +1106,55 @@ function drawCapture(){
 }
 function sumTxt(){ let o=0,i=0; R.items.forEach(x=>{ if(x.on) x.type==='in'?i+=x.amount:o+=x.amount; }); return [o?`−${won(o)}원`:'', i?`+${won(i)}원`:''].filter(Boolean).join(' / ')||'0원'; }
 function drawSaveBar(){ const btn=document.querySelector('[data-act="cap-save"]'); if(btn){ const n=R.items.filter(i=>i.on).length; btn.textContent=n?`확인 완료 · ${n}건 등록 (${sumTxt()})`:'등록할 내역을 체크해 주세요'; btn.disabled=!n; } }
+/* ---------------- 고정지출 불러오기 ---------------- */
+let FX=null;
+function fxRegistered(f, month){ return S.txs.some(t=>!t.ex && t.type==='out' && t.date.startsWith(month) && (t.fx===f.id || (t.amount===f.amount && sameText(t.memo,f.name)))); }
+function fxDate(f, month){ const [y,m]=month.split('-').map(Number), last=new Date(y,m,0).getDate(); const d=Math.min(Math.max(1,+f.day||1), last); return `${month}-${String(d).padStart(2,'0')}`; }
+function openFixed(){ const month=S.month; FX={month, sel:{}, edit:null};
+  (S.settings.fixed||[]).forEach(f=>{ FX.sel[f.id]=!fxRegistered(f,month); });
+  $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawFixed(); }
+function drawFixed(){
+  const list=S.settings.fixed||[], names=S.settings.names, n=list.filter(f=>FX.sel[f.id]).length;
+  const total=list.filter(f=>FX.sel[f.id]).reduce((a,f)=>a+(+f.amount||0),0);
+  let body='';
+  if(FX.edit){ const f=FX.edit;
+    body=`<div class="card" style="margin-top:8px"><div class="field"><label for="fx-name">이름</label><input class="inp" id="fx-name" value="${esc(f.name||'')}" placeholder="예: 월세, 보험료, 넷플릭스"></div>
+      <div class="field"><label for="fx-amt">금액 (원)</label><input class="inp num" id="fx-amt" inputmode="numeric" value="${f.amount?won(f.amount):''}" placeholder="0"></div>
+      <div class="field"><label for="fx-day">매달 며칠</label><input class="inp num" id="fx-day" inputmode="numeric" value="${esc(f.day||'')}" placeholder="예: 25"></div>
+      <div class="field"><label for="fx-cat">카테고리</label><select class="inp" id="fx-cat">${catsOf('out').map(([k,l])=>`<option value="${k}" ${k===(f.cat||'housing')?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+      <div class="field"><label>누가</label><span class="segm" style="align-self:start">${[['a',names.a],['b',names.b],['us','우리']].map(([k,l])=>`<button class="${(f.who||'us')===k?'on':''}" data-fxwho="${k}">${esc(l)}</button>`).join('')}</span></div>
+      ${f.id&&list.some(x=>x.id===f.id)?`<div class="btns"><button class="btn danger ${FX.armed?'armed':''}" data-act="fx-del">${FX.armed?'한 번 더 누르면 삭제':'이 고정지출 삭제'}</button></div>`:''}
+      <div class="err" id="fx-err"></div></div>`;
+  } else if(!list.length){
+    body=`<div class="empty" style="margin-top:30px"><div>저장된 고정지출이 없어요.</div><div class="small">월세·보험료·통신비·구독료처럼 매달 나가는 돈을 등록해 두면<br>한 번에 불러올 수 있어요.</div></div>`;
+  } else {
+    body=`<div class="cap-sum">${monthLabel(FX.month)}에 넣을 고정지출을 골라 주세요</div><div class="cap-list">${list.map(f=>{ const done=fxRegistered(f,FX.month), on=!!FX.sel[f.id], c=catInfo(f.cat);
+      return `<div class="crec ${on?'':'off'}"><button class="ck ${on?'on':''}" data-fxsel="${esc(f.id)}" aria-label="${on?'빼기':'넣기'}">${on?svg('check'):''}</button>
+        <div class="crec-b" data-fxedit="${esc(f.id)}" style="cursor:pointer"><div class="crec-r" style="justify-content:space-between"><b style="font-weight:600">${esc(f.name)}</b><b class="num">${won(f.amount)}원</b></div>
+        <div class="small">매달 ${esc(f.day||1)}일 · ${esc(c.label)} · ${esc(whoName(f.who||'us'))}</div>${done?'<div class="flag" style="color:var(--accent)">이번 달 이미 등록됨</div>':''}</div></div>`; }).join('')}</div>
+      <div class="small" style="padding:10px 4px 0">항목을 누르면 고칠 수 있어요.</div>`;
+  }
+  $('#sheet').innerHTML=`<div class="sheet-in"><div class="sheet-top">${FX.edit?`<button class="iconbtn" data-act="fx-back" aria-label="뒤로">${svg('back')}</button>`:'<span></span>'}<div class="cap-h">${FX.edit?(FX.edit.id&&list.some(x=>x.id===FX.edit.id)?'고정지출 고치기':'새 고정지출'):'고정지출 불러오기'}</div><button class="iconbtn" data-act="fx-close" aria-label="닫기">${svg('close')}</button></div>${body}</div>
+    <div class="save-bar"><div class="save-bar-in">${FX.edit?`<button class="btn primary" data-act="fx-save">저장</button>`
+      :`<button class="btn" data-act="fx-new" style="flex:0 0 auto">+ 추가</button>${list.length?`<button class="btn primary" data-act="fx-load" ${n?'':'disabled'}>${n?`${n}건 넣기 (−${won(total)}원)`:'넣을 항목을 골라 주세요'}</button>`:''}`}</div></div>`;
+  const amt=$('#fx-amt'); if(amt) amt.oninput=e=>{ const v=+e.target.value.replace(/\D/g,'').slice(0,12); e.target.value=v?won(v):''; };
+  const nm=$('#fx-name'), cs=$('#fx-cat'); if(nm&&cs){ let touched=!!FX.edit.id; cs.onchange=()=>{ touched=true; };
+    nm.oninput=()=>{ if(touched) return; const t=nm.value; const c=/월세|관리비|전세|주거/.test(t)?'housing':/보험/.test(t)?'insurance':/대출|이자/.test(t)?'loan':kwCat(t,'out'); if(c&&c!=='etc') cs.value=c; }; }
+}
+async function saveFixed(){
+  const f=FX.edit, name=$('#fx-name').value.trim(), amount=+$('#fx-amt').value.replace(/\D/g,''), day=Math.min(31,Math.max(1,+$('#fx-day').value.replace(/\D/g,'')||1));
+  if(!name||!amount){ $('#fx-err').textContent='이름과 금액을 넣어 주세요.'; return; }
+  const item={id:f.id||uid(), name:name.slice(0,30), amount, day, cat:$('#fx-cat').value, who:f.who||'us'};
+  const list=[...(S.settings.fixed||[])]; const i=list.findIndex(x=>x.id===item.id); if(i>=0) list[i]=item; else list.push(item);
+  try{ await store().saveSettings({...S.settings, fixed:list}); S.settings.fixed=list; FX.sel[item.id]=!fxRegistered(item,FX.month); FX.edit=null; FX.armed=false; drawFixed(); toast('고정지출을 저장했어요'); }
+  catch(e){ $('#fx-err').textContent='저장하지 못했어요. 인터넷 연결을 확인해 주세요.'; }
+}
+async function loadFixed(){
+  const base=Date.now(), txs=(S.settings.fixed||[]).filter(f=>FX.sel[f.id]).map((f,k)=>({id:uid(), type:'out', date:fxDate(f,FX.month), amount:f.amount, who:f.who||'us', cat:f.cat||'etc', memo:f.name, createdAt:base-k, fx:f.id}));
+  if(!txs.length) return;
+  try{ await store().putMany(txs); FX=null; $('#sheet').hidden=true; document.body.style.overflow=''; S.tab='book'; S.bookMode='list'; render(); toast(`고정지출 ${txs.length}건을 넣었어요`); }
+  catch(e){ toast('넣지 못했어요. 다시 시도해 주세요', 3000); }
+}
 function closeCapture(){ R=null; $('#sheet').hidden=true; document.body.style.overflow=''; }
 async function saveCapture(){
   const base=Date.now(), txs=R.items.filter(i=>i.on&&i.amount>0).map((it,k)=>({id:uid(), type:it.type, date:it.date, amount:it.amount, who:it.who||R.who, cat:it.cat, memo:it.merchant, createdAt:base-k, cap:true}));
@@ -1109,6 +1164,7 @@ async function saveCapture(){
 }
 
 /* ---------------- 이벤트 ---------------- */
+document.addEventListener('click', e=>{ const fe=e.target.closest('[data-fxedit]'); if(fe && FX && !e.target.closest('button')){ const f=(S.settings.fixed||[]).find(x=>x.id===fe.dataset.fxedit); if(f){ FX.edit={...f}; FX.armed=false; drawFixed(); } } });
 document.addEventListener('click', e=>{ const ne=e.target.closest('[data-note-edit]'); if(ne && !e.target.closest('button')){ S.editNote=ne.dataset.noteEdit; render(); } });
 document.addEventListener('click', async e=>{
   const b=e.target.closest('button'); if(!b) return;
@@ -1124,6 +1180,8 @@ document.addEventListener('click', async e=>{
   if(d.notePin){ const n=S.notes.find(x=>x.id===d.notePin); if(n){ patchNote(n.id,{pin:!n.pin}); toast(n.pin?'고정을 풀었어요':'맨 위에 고정했어요'); } return; }
   if(d.noteDel){ if(S.delNote!==d.noteDel){ S.delNote=d.noteDel; render(); clearTimeout(S._dn); S._dn=setTimeout(()=>{ S.delNote=null; render(); },3000); } else { S.delNote=null; try{ await store().removeNote(d.noteDel); toast('메모를 지웠어요'); }catch(e){ toast('지우지 못했어요'); } } return; }
   if(d.noteSave){ const v=$('#note-edit').value.trim(); S.editNote=null; if(v) await patchNote(d.noteSave,{text:v.slice(0,500)}); render(); return; }
+  if(FX && d.fxsel){ FX.sel[d.fxsel]=!FX.sel[d.fxsel]; drawFixed(); return; }
+  if(FX && d.fxwho){ FX.edit.who=d.fxwho; FX.edit.name=$('#fx-name').value; FX.edit.amount=+$('#fx-amt').value.replace(/\D/g,''); FX.edit.day=$('#fx-day').value; FX.edit.cat=$('#fx-cat').value; drawFixed(); return; }
   if(d.edit){ const t=S.txs.find(x=>x.id===d.edit); if(t) openSheet(t); return; }
   if(F && !$('#sheet').hidden){
     if(d.type){ if(F.type!==d.type){ F.type=d.type; F.cat=''; } drawSheet(); return; }
@@ -1138,6 +1196,15 @@ document.addEventListener('click', async e=>{
     case 'add': openSheet(); break;
     case 'scan': $('#f-photo')?.click(); break;
     case 'note-add': addNote(); break;
+    case 'fx-open': closeSheet(); openFixed(); break;
+    case 'fx-close': FX=null; $('#sheet').hidden=true; document.body.style.overflow=''; break;
+    case 'fx-new': FX.edit={who:'us', cat:'housing'}; FX.armed=false; drawFixed(); break;
+    case 'fx-back': FX.edit=null; FX.armed=false; drawFixed(); break;
+    case 'fx-save': saveFixed(); break;
+    case 'fx-load': loadFixed(); break;
+    case 'fx-del': if(!FX.armed){ FX.armed=true; drawFixed(); } else { const list=(S.settings.fixed||[]).filter(x=>x.id!==FX.edit.id); await store().saveSettings({...S.settings, fixed:list}); S.settings.fixed=list; FX.edit=null; FX.armed=false; drawFixed(); toast('삭제했어요'); } break;
+    case 'fx-from': { const f={id:uid(), name:(F.memo||catInfo(F.cat).label).slice(0,30), amount:F.amount, day:+F.date.slice(8), cat:F.cat, who:F.who};
+      const list=[...(S.settings.fixed||[]), f]; try{ await store().saveSettings({...S.settings, fixed:list}); S.settings.fixed=list; toast(`'${f.name}'을(를) 고정지출로 저장했어요`); }catch(e){ toast('저장하지 못했어요'); } } break;
     case 'note-cancel': S.editNote=null; render(); break;
     case 'bookmode': S.bookMode = S.bookMode==='cal'?'list':'cal'; render(); break;
     case 'caps': $('#f-caps')?.click(); break;
