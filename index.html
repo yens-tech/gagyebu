@@ -285,7 +285,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-24';
+const APP_VERSION='2026.11.05-25';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -777,8 +777,8 @@ async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ contents:[{parts:[{text:prompt},{inline_data:{mime_type:blob.type||'image/jpeg', data:b64}}]}],
             generationConfig:Object.assign({ responseMimeType:'application/json', temperature:0 }, thinkCfg(model)?{thinkingConfig:thinkCfg(model)}:{}) })
-        }, 20000);
-      }catch(e){ if(e&&e.code==='timeout'){ last={code:'timeout'}; markBusy(model, 6*3600000); onStatus(`${model} 응답이 늦어서 다른 모델로 바꾸는 중…`); break; } last={code:'net'}; break; }
+        }, (!orKey() && mi===tries.length-1) ? 25000 : 10000);
+      }catch(e){ if(e&&e.code==='timeout'){ last={code:'timeout'}; markBusy(model, 6*3600000); onStatus(`${model} 10초 넘게 응답이 없어서 다른 모델로 바꾸는 중…`); break; } last={code:'net'}; break; }
       let j=null; try{ j=await r.json(); }catch(e){}
       if(r.ok){
         const text=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
@@ -823,7 +823,7 @@ async function readWithOpenRouter(blob, key, prompt, onStatus=()=>{}){
     let r;
     try{ r=await tfetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'X-Title':'Our Gagyebu'},
-      body:JSON.stringify({model, temperature:0, messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url}}]}]})},30000); }
+      body:JSON.stringify({model, temperature:0, messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url}}]}]})}, model===models.slice(0,3).slice(-1)[0] ? 25000 : 12000); }
     catch(e){ last={code:e&&e.code==='timeout'?'timeout':'net'}; markBusy(model); continue; }
     let j=null; try{ j=await r.json(); }catch(e){}
     if(r.status===401||r.status===403) throw {code:'orkey', detail:j?.error?.message||''};
