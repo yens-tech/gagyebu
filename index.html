@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-13';
+const APP_VERSION='2026.11.05-14';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -583,6 +583,8 @@ function settingsView(){
   <h2 class="sec-h">영수증 자동 입력</h2><div class="card"><div class="field">
     <label for="gkey">Gemini API 키 (이 폰에만 저장)</label>
     <div class="two"><input class="inp" id="gkey" type="password" autocomplete="off" placeholder="AIza로 시작하는 키" value="${esc(geminiKey())}"><button class="btn" data-act="save-key">키 저장</button></div>
+    <div class="btns" style="padding:4px 0 0"><button class="btn" data-act="gem-test">Gemini 연결 확인</button></div>
+    <div id="gem-out" class="small" style="white-space:pre-wrap;line-height:1.6"></div>
     <div class="small">Google AI Studio(aistudio.google.com)에서 무료로 발급받을 수 있어요. ${window.STANDALONE?'':'지금 미리보기에서는 키 없이도 영수증 읽기를 써볼 수 있어요.'}</div>
   </div></div>
   <h2 class="sec-h">함께 쓰기</h2><div class="card"><div class="field">
@@ -788,6 +790,28 @@ async function scanReceipt(file){
   F.memo=[res.store, res.items].filter(Boolean).join(' · ').slice(0,40) || F.memo;
   F.scanOk=true; F.scanMsg='영수증에서 읽었어요. 내용을 확인하고 저장을 눌러 주세요.';
   drawSheet();
+}
+
+async function geminiTest(){
+  const out=$('#gem-out'), key=($('#gkey')?.value||'').trim()||geminiKey();
+  if(!key){ out.textContent='먼저 키를 넣고 키 저장을 눌러 주세요.'; return; }
+  const lines=[]; const show=()=>{ out.textContent=lines.join('\n'); };
+  lines.push('모델 목록 확인 중…'); show();
+  let models; try{ try{ localStorage.removeItem(GEM_LIST_LS); }catch(e){} models=await listGeminiModels(key); lines[0]=`쓸 수 있는 모델: ${models.join(', ')}`; }
+  catch(e){ lines[0]= e.code==='key' ? '키가 맞지 않아요. AI Studio에서 키를 다시 복사해 주세요.' : e.code==='net' ? 'Gemini 서버에 연결하지 못했어요.' : `모델 목록 실패: ${e.detail||e.code}`; show(); return; }
+  show();
+  for(const m of models.slice(0,4)){
+    const i=lines.push(`${m}: 확인 중…`)-1; show(); const t0=Date.now();
+    try{
+      const body={contents:[{parts:[{text:'다음 JSON만 답하세요: {"ok":true}'}]}], generationConfig:Object.assign({responseMimeType:'application/json',temperature:0}, thinkCfg(m)?{thinkingConfig:thinkCfg(m)}:{})};
+      let r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      let j=null; try{ j=await r.json(); }catch(e){}
+      if(r.status===400 && /thinking/i.test(j?.error?.message||'')){ delete body.generationConfig.thinkingConfig; r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=null; try{ j=await r.json(); }catch(e){} }
+      const sec=((Date.now()-t0)/1000).toFixed(1);
+      lines[i] = r.ok ? `${m}: 성공 (${sec}초)` : `${m}: 실패 ${r.status} ${(j?.error?.message||'').slice(0,120)}`;
+    }catch(e){ lines[i]=`${m}: 연결 실패`; }
+    show();
+  }
 }
 
 /* ---------------- 결제내역 캡처 (여러 건) ---------------- */
@@ -1000,6 +1024,7 @@ document.addEventListener('click', async e=>{
     case 'cap-close': closeCapture(); break;
     case 'cap-save': saveCapture(); break;
     case 'cap-read': readPasted(); break;
+    case 'gem-test': geminiTest(); break;
     case 'paste': { const who=F.who; closeSheet(); openPaste(who); } break;
     case 'cap-retry': { const fs=R.files, w=R.who; startCapture(fs,w); } break;
     case 'close': closeSheet(); break;
