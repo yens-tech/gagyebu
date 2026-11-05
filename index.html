@@ -140,7 +140,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 
 /* tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
-.tabs-in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);align-items:center;position:relative}
+.tabs-in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr);align-items:center;position:relative}
 .tab{display:grid;justify-items:center;gap:2px;font-size:11px;color:var(--muted);padding:6px 0}
 .tab.on{color:var(--accent)}
 .fab{display:none;position:absolute;right:4px;top:-76px;width:58px;height:58px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 6px 18px rgba(14,138,132,.32)}
@@ -185,6 +185,23 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .scan-msg.ok{color:var(--accent)} .scan-msg.bad{color:var(--over)}
 .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--accent);border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
+.mweek{display:grid;gap:8px;margin-top:14px}
+.mday{display:grid;grid-template-columns:52px 1fr;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 10px 10px 12px;align-items:start}
+.mday.today{border-color:var(--accent)}
+.mday-h{display:grid;justify-items:center;gap:2px;padding-top:6px}
+.mday-h b{font-size:16px} .mday-h span{font-size:12px;color:var(--muted)}
+.mday.sun .mday-h b{color:var(--over)} .mday.sat .mday-h b{color:var(--sat)}
+.mday.today .mday-h b{color:var(--accent)}
+.mslots{display:grid;gap:6px;min-width:0}
+.mslot{display:grid;grid-template-columns:40px 1fr;gap:8px;align-items:start;text-align:left;padding:8px 10px;border-radius:10px;background:var(--bg);width:100%}
+.mslot.mempty{background:transparent;border:1px dashed var(--line)}
+.mslot.edit{background:var(--bg)}
+.mtag{font-size:12px;color:var(--accent);font-weight:600;padding-top:2px}
+.mtext{display:grid;gap:2px;min-width:0;word-break:break-word}
+.mi{color:var(--muted)}
+.medit{display:grid;gap:6px;min-width:0}
+.medit .inp{padding:9px 10px;font-size:15px}
+.btn[disabled]{opacity:.45;cursor:default}
 .fxbtn{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;margin:2px 0 6px;font-weight:600;color:var(--fg);background:var(--surface)}
 .fxbtn svg.i{color:var(--accent)}
 .fxbtn .small{margin-left:auto;font-weight:400}
@@ -289,7 +306,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-31';
+const APP_VERSION='2026.11.05-33';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -360,9 +377,9 @@ const IN_CATS = [['salary','월급'],['bonus','보너스'],['side','부수입'],
 const CFG = window.APP_CONFIG || {};
 const HAS_FB = !!(CFG.firebase && CFG.firebase.apiKey);
 const LS_KEY = 'gagyebu.v1';
-const DEFAULT_SETTINGS = { names:{a:'주영', b:'대현'}, budget:2600000, customCats:[], anniv:'2026-08-29', fixed:[] };
+const DEFAULT_SETTINGS = { names:{a:'주영', b:'대현'}, budget:2600000, customCats:[], anniv:'2026-08-29', fixed:[], weeklyFood:100000 };
 const S = {
-  txs:[], notes:[], bookMode:'cal', settings:structuredClone(DEFAULT_SETTINGS), tab:'home',
+  txs:[], notes:[], meals:{}, week:null, bookMode:'cal', settings:structuredClone(DEFAULT_SETTINGS), tab:'home',
   month: ym(new Date()), source: HAS_FB ? 'firebase' : 'local', user:null, ready:!HAS_FB, lastWho:'us'
 };
 
@@ -388,7 +405,10 @@ const LocalStore = {
     if(d){ S.txs=d.txs||[]; S.settings={...structuredClone(DEFAULT_SETTINGS),...d.settings}; }
     else { S.txs=sampleData(); this.persist(); }
     try{ S.notes=JSON.parse(localStorage.getItem(LS_KEY+'.notes'))||[]; }catch(e){}
+    try{ S.meals=JSON.parse(localStorage.getItem(LS_KEY+'.meals'))||{}; }catch(e){}
   },
+  async putMeal(m){ S.meals[m.date]=m; try{ localStorage.setItem(LS_KEY+'.meals', JSON.stringify(S.meals)); }catch(e){} render(); },
+  async putMeals(ms){ ms.forEach(m=>S.meals[m.date]=m); try{ localStorage.setItem(LS_KEY+'.meals', JSON.stringify(S.meals)); }catch(e){} render(); },
   persistNotes(){ try{ localStorage.setItem(LS_KEY+'.notes', JSON.stringify(S.notes)); }catch(e){} },
   async putNote(n){ const i=S.notes.findIndex(x=>x.id===n.id); if(i>=0) S.notes[i]=n; else S.notes.push(n); this.persistNotes(); render(); },
   async removeNote(id){ S.notes=S.notes.filter(x=>x.id!==id); this.persistNotes(); render(); },
@@ -419,6 +439,7 @@ const FireStore = {
   listen(){
     this.liveStart = shiftMonth(ym(new Date()), -2)+'-01'; this.live=[]; this.old={}; this.loading={};
     this.unsub.push(this.home().collection('tx').where('date','>=',this.liveStart).onSnapshot(snap=>{ this.live=snap.docs.map(d=>d.data()); this.merge(); render(); }, err=>{ S.fbError='데이터를 읽을 권한이 없어요. 보안 규칙에 두 사람 이메일을 넣었는지 확인해 주세요.'; render(); }));
+    this.unsub.push(this.home().collection('meals').where('date','>=',shiftMonth(ym(new Date()),-2)+'-01').onSnapshot(snap=>{ const m={}; snap.docs.forEach(d=>{ const v=d.data(); m[v.date]=v; }); S.meals={...S.meals, ...m}; if(S.tab==='meal' && !S.mealEdit) render(); }, ()=>{}));
     this.unsub.push(this.home().collection('notes').onSnapshot(snap=>{ S.notes=snap.docs.map(d=>d.data()); if(!S.editNote) render(); }, ()=>{}));
     this.unsub.push(this.home().onSnapshot(d=>{ const data=d.exists?d.data():{}; const s=data.settings; if(s) S.settings={...structuredClone(DEFAULT_SETTINGS),...s}; S.keys=data.keys||{}; render(); }, ()=>{}));
   },
@@ -438,6 +459,8 @@ const FireStore = {
   async saveSettings(s){ await this.home().set({settings:s},{merge:true}); },
   async saveKey(name,v){ await this.home().set({keys:{[name]:v}},{merge:true}); },
   async putNote(n){ await this.home().collection('notes').doc(n.id).set(n); },
+  async putMeal(m){ await this.home().collection('meals').doc(m.date).set(m); },
+  async putMeals(ms){ const b=this.db.batch(); ms.forEach(m=>b.set(this.home().collection('meals').doc(m.date), m)); await b.commit(); },
   async removeNote(id){ await this.home().collection('notes').doc(id).delete(); },
   async login(email,pw){ await this.auth.signInWithEmailAndPassword(email,pw); },
   async logout(){ await this.auth.signOut(); }
@@ -471,10 +494,12 @@ function render(){
       <button class="iconbtn" data-act="next" aria-label="다음 달">${svg('next')}</button></div>`;
   const head = S.tab==='home' ? ''
     : S.tab==='settings' ? `<header class="top"><div class="month"><h1 style="text-align:left;min-width:0">설정</h1></div></header>`
+    : S.tab==='meal' ? `<header class="top"><div class="month"><button class="iconbtn" data-act="wk-prev" aria-label="지난주">${svg('back')}</button><h1 style="min-width:150px">${esc(weekLabel())}</h1><button class="iconbtn" data-act="wk-next" aria-label="다음주">${svg('next')}</button></div><div class="top-actions"><button class="iconbtn" data-act="wk-copy" aria-label="지난주 식단 복사">${svg('refresh')}</button></div></header>`
     : `<header class="top">${monthNav}${S.tab==='book'?`<div class="top-actions"><button class="iconbtn" data-act="bookmode" aria-label="${S.bookMode==='cal'?'목록으로 보기':'달력으로 보기'}">${svg(S.bookMode==='cal'?'list':'cal')}</button></div>`:''}</header>`;
   const err = S.fbError ? `<div class="example" style="background:var(--chip);color:var(--over)">${esc(S.fbError)}</div>` : '';
-  app.innerHTML = head + err + (S.tab==='home'?homeView():S.tab==='book'?(S.bookMode==='cal'?calendarView():listView()):S.tab==='stats'?statsView():settingsView());
+  app.innerHTML = head + err + (S.tab==='home'?homeView():S.tab==='book'?(S.bookMode==='cal'?calendarView():listView()):S.tab==='meal'?mealView():S.tab==='stats'?statsView():settingsView());
   if(S.tab==='home') bindHome();
+  const wl=$('#wk-lim-in'); if(wl) wl.oninput=e=>{ const v=+e.target.value.replace(/\D/g,''); e.target.value=v?won(v):''; };
   if(S.tab==='settings') bindSettings();
 }
 
@@ -575,6 +600,58 @@ async function addNote(){
 }
 async function patchNote(id, patch){ const n=(S.notes||[]).find(x=>x.id===id); if(!n) return; try{ await store().putNote({...n, ...patch, updatedAt:Date.now()}); }catch(e){ toast('저장하지 못했어요', 3000); } }
 
+/* ---------------- 주간 식단 ---------------- */
+const SLOT={b:'아침', l:'점심', d:'저녁'};
+function weekStart(d){ const x=new Date(d); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); x.setHours(0,0,0,0); return x; }
+function curWeek(){ if(!S.week) S.week=ymd(weekStart(new Date())); return S.week; }
+function weekDays(){ const s=new Date(curWeek()+'T00:00'); return [...Array(7)].map((_,i)=>{ const d=new Date(s); d.setDate(s.getDate()+i); return d; }); }
+function weekLabel(){ const ds=weekDays(), a=ds[0], b=ds[6]; return `${a.getMonth()+1}월 ${a.getDate()}일 ~ ${a.getMonth()===b.getMonth()?'':(b.getMonth()+1)+'월 '}${b.getDate()}일`; }
+function slotsFor(d){ return ['b','l','d']; }
+function mealView(){
+  const days=weekDays(), today=ymd(new Date()), from=ymd(days[0]), to=ymd(days[6]);
+  const food=S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&['food','mart','delivery','conv'].includes(t.cat)).reduce((a,t)=>a+t.amount,0);
+  const lim=+S.settings.weeklyFood||0, pct=lim?Math.min(100,food/lim*100):0;
+  let html=`<section class="sum" style="gap:10px"><div style="display:flex;justify-content:space-between;align-items:end;gap:8px">
+      <div><div class="sum-label">이번 주 식비 <span class="small">(식비·생필품·배달·편의점)</span></div><div class="sum-big num" style="font-size:26px">${won(food)}<small>원</small></div></div>
+      <button class="btn" data-act="wk-limit" style="padding:8px 12px;font-size:13px">${lim?'한도 '+short(lim):'한도 정하기'}</button></div>
+    ${lim?`<div class="bar ${food>lim?'over':pct>=80?'warn':''}"><i style="width:${pct}%"></i></div><div class="hint">${food>lim?`한도보다 <b class="num neg">${won(food-lim)}원</b> 더 썼어요`:`이번 주 <b class="num">${won(lim-food)}원</b> 남았어요`}</div>`:''}
+    ${S.limEdit?`<div class="two"><input class="inp num" id="wk-lim-in" inputmode="numeric" value="${lim?won(lim):''}" placeholder="예: 100,000"><button class="btn primary" data-act="wk-limit-save">저장</button></div>`:''}</section>`;
+  html+=`<div class="mweek">`;
+  for(const d of days){ const key=ymd(d), m=S.meals[key]||{date:key, meals:{}}, dow=d.getDay();
+    html+=`<div class="mday ${key===today?'today':''} ${dow===0?'sun':dow===6?'sat':''}"><div class="mday-h"><b>${DOW[dow]}</b><span class="num">${d.getMonth()+1}/${d.getDate()}</span></div><div class="mslots">`;
+    for(const k of slotsFor(d)){ const v=(m.meals||{})[k]||{};
+      const isEdit=S.mealEdit===key+'|'+k;
+      if(isEdit) html+=`<div class="mslot edit"><span class="mtag">${SLOT[k]}</span><div class="medit"><input class="inp" id="me-menu" placeholder="메뉴 (예: 된장찌개, 계란말이)" value="${esc(v.menu||'')}"><input class="inp" id="me-ing" placeholder="장볼 재료 (쉼표로: 두부, 애호박, 계란)" value="${esc(v.ing||'')}">
+        <div class="memo-act"><button class="btn" data-act="me-cancel">취소</button><button class="btn primary" data-mesave="${key}|${k}">저장</button></div></div></div>`;
+      else html+=`<button class="mslot ${v.menu?'':'mempty'}" data-meal="${key}|${k}"><span class="mtag">${SLOT[k]}</span><span class="mtext">${v.menu?esc(v.menu):'<span class="small">+ 메뉴 넣기</span>'}${v.ing?`<span class="small mi">🛒 ${esc(v.ing)}</span>`:''}</span></button>`;
+    }
+    html+=`</div></div>`; }
+  html+=`</div>`;
+  const ings=[...new Set(days.flatMap(d=>Object.values((S.meals[ymd(d)]||{}).meals||{}).flatMap(v=>String(v.ing||'').split(/[,，、\n]/).map(x=>x.trim()).filter(Boolean))))];
+  html+=`<div class="btns" style="padding-top:14px"><button class="btn primary" data-act="wk-shop" ${ings.length?'':'disabled'} style="flex:1">${ings.length?`이번 주 장보기 목록 만들기 (${ings.length}개)`:'재료를 적으면 장보기 목록을 만들 수 있어요'}</button></div>
+    <div class="small" style="padding:0 4px">장보기 목록은 홈의 우리 메모에 올라가요. 오른쪽 위 버튼으로 지난주 식단을 복사할 수 있어요.</div>`;
+  return html;
+}
+async function saveMealSlot(key,k){
+  const menu=$('#me-menu').value.trim(), ing=$('#me-ing').value.trim();
+  const m=JSON.parse(JSON.stringify(S.meals[key]||{date:key, meals:{}})); m.meals=m.meals||{};
+  if(menu||ing) m.meals[k]={menu:menu.slice(0,60), ing:ing.slice(0,120)}; else delete m.meals[k];
+  m.updatedAt=Date.now(); S.mealEdit=null;
+  try{ await store().putMeal(m); render(); }catch(e){ toast('저장하지 못했어요', 3000); }
+}
+async function copyLastWeek(){
+  const days=weekDays(), out=[];
+  for(const d of days){ const p=new Date(d); p.setDate(p.getDate()-7); const prev=S.meals[ymd(p)]; if(prev&&prev.meals&&Object.keys(prev.meals).length){ const key=ymd(d); const cur=S.meals[key]; if(cur&&cur.meals&&Object.keys(cur.meals).length) continue; out.push({date:key, meals:JSON.parse(JSON.stringify(prev.meals)), updatedAt:Date.now()}); } }
+  if(!out.length){ toast('복사할 지난주 식단이 없거나, 이번 주가 이미 채워져 있어요', 3000); return; }
+  try{ await store().putMeals(out); toast(`지난주 식단 ${out.length}일치를 복사했어요 (빈 날만)`); render(); }catch(e){ toast('복사하지 못했어요'); }
+}
+async function makeShopList(){
+  const days=weekDays(); const ings=[...new Set(days.flatMap(d=>Object.values((S.meals[ymd(d)]||{}).meals||{}).flatMap(v=>String(v.ing||'').split(/[,，、\n]/).map(x=>x.trim()).filter(Boolean))))];
+  if(!ings.length) return;
+  const n={id:'shop_'+curWeek(), text:`🛒 장보기 (${weekLabel()})\n`+ings.map(x=>'- '+x).join('\n'), who:me()||'', createdAt:Date.now(), pin:true, done:false};
+  try{ await store().putNote(n); toast('홈 메모에 장보기 목록을 올렸어요', 2500); }catch(e){ toast('올리지 못했어요'); }
+}
+
 function listView(){
   const tx=monthTx(S.month).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
   const hasEx=S.txs.some(t=>t.ex);
@@ -648,7 +725,7 @@ function settingsView(){
 
 function renderTabs(){
   const t=(k,ic,l)=>`<button class="tab ${S.tab===k?'on':''}" data-tab="${k}">${svg(ic)}<span>${l}</span></button>`;
-  $('#tabs').innerHTML=`<div class="tabs-in">${t('home','home','홈')}${t('book','book','가계부')}${t('stats','chart','분석')}${t('settings','gear','설정')}</div>`
+  $('#tabs').innerHTML=`<div class="tabs-in">${t('home','home','홈')}${t('book','book','가계부')}${t('meal','food','식단')}${t('stats','chart','분석')}${t('settings','gear','설정')}</div>`
     + (S.tab==='home'||S.tab==='book' ? `<button class="reg" data-act="add">${svg('plus')}가계부 등록</button>` : '');
 }
 
@@ -1186,6 +1263,8 @@ document.addEventListener('click', async e=>{
   if(d.noteSave){ const v=$('#note-edit').value.trim(); S.editNote=null; if(v) await patchNote(d.noteSave,{text:v.slice(0,500)}); render(); return; }
   if(FX && d.fxsel){ FX.sel[d.fxsel]=!FX.sel[d.fxsel]; drawFixed(); return; }
   if(FX && d.fxwho){ FX.edit.who=d.fxwho; FX.edit.name=$('#fx-name').value; FX.edit.amount=+$('#fx-amt').value.replace(/\D/g,''); FX.edit.day=$('#fx-day').value; FX.edit.cat=$('#fx-cat').value; drawFixed(); return; }
+  if(d.meal){ S.mealEdit=d.meal; render(); setTimeout(()=>$('#me-menu')?.focus(),30); return; }
+  if(d.mesave){ const [key,k]=d.mesave.split('|'); saveMealSlot(key,k); return; }
   if(d.edit){ const t=S.txs.find(x=>x.id===d.edit); if(t) openSheet(t); return; }
   if(F && !$('#sheet').hidden){
     if(d.type){ if(F.type!==d.type){ F.type=d.type; F.cat=''; } drawSheet(); return; }
@@ -1200,6 +1279,13 @@ document.addEventListener('click', async e=>{
     case 'add': openSheet(); break;
     case 'scan': $('#f-photo')?.click(); break;
     case 'note-add': addNote(); break;
+    case 'me-cancel': S.mealEdit=null; render(); break;
+    case 'wk-prev': { const d=new Date(curWeek()+'T00:00'); d.setDate(d.getDate()-7); S.week=ymd(d); S.mealEdit=null; render(); } break;
+    case 'wk-next': { const d=new Date(curWeek()+'T00:00'); d.setDate(d.getDate()+7); S.week=ymd(d); S.mealEdit=null; render(); } break;
+    case 'wk-copy': copyLastWeek(); break;
+    case 'wk-shop': makeShopList(); break;
+    case 'wk-limit': S.limEdit=!S.limEdit; render(); break;
+    case 'wk-limit-save': { const v=+$('#wk-lim-in').value.replace(/\D/g,''); S.limEdit=false; try{ await store().saveSettings({...S.settings, weeklyFood:v}); toast('주간 식비 한도를 저장했어요'); }catch(e){ toast('저장하지 못했어요'); } render(); } break;
     case 'fx-open': closeSheet(); openFixed(); break;
     case 'fx-close': FX=null; $('#sheet').hidden=true; document.body.style.overflow=''; break;
     case 'fx-new': FX.edit={who:'us', cat:'housing'}; FX.armed=false; drawFixed(); break;
