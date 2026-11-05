@@ -267,7 +267,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 <input type="file" id="ph-global" accept="image/*" hidden>
 
 <script>
-const APP_VERSION='2026.11.05-22';
+const APP_VERSION='2026.11.05-23';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -527,22 +527,24 @@ function bindHome(){
 
 }
 async function loadBitmap(file){
-  try{ return await createImageBitmap(file); }catch(e){}
-  return await new Promise((res,rej)=>{ const url=URL.createObjectURL(file), img=new Image();
-    img.onload=()=>{ URL.revokeObjectURL(url); res(img); }; img.onerror=()=>{ URL.revokeObjectURL(url); rej({code:'decode'}); }; img.src=url; });
+  // 큰 사진은 <img>로 여는 게 아이폰에서 메모리를 덜 써요
+  try{ return await new Promise((res,rej)=>{ const url=URL.createObjectURL(file), img=new Image(); img.decoding='async';
+    img.onload=()=>{ res(img); setTimeout(()=>URL.revokeObjectURL(url),1000); }; img.onerror=()=>{ URL.revokeObjectURL(url); rej({code:'decode'}); }; img.src=url; }); }
+  catch(e){ return await createImageBitmap(file); }
 }
 async function photoData(file){
-  const bmp=await loadBitmap(file), k=Math.min(1,1080/Math.max(bmp.width,bmp.height));
-  const c=document.createElement('canvas'); c.width=Math.round(bmp.width*k); c.height=Math.round(bmp.height*k);
-  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+  const bmp=await loadBitmap(file), W=bmp.naturalWidth||bmp.width, H=bmp.naturalHeight||bmp.height, k=Math.min(1,1080/Math.max(W,H));
+  const c=document.createElement('canvas'); c.width=Math.round(W*k); c.height=Math.round(H*k);
+  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height); if(bmp.close) bmp.close();
   for(const q of [0.8,0.68,0.55,0.45]){ const d=c.toDataURL('image/jpeg',q); if(d.length<650000) return d; }
   const c2=document.createElement('canvas'); c2.width=Math.round(c.width*0.7); c2.height=Math.round(c.height*0.7); c2.getContext('2d').drawImage(c,0,0,c2.width,c2.height); return c2.toDataURL('image/jpeg',0.6);
 }
 async function addPhoto(file){
   if((S.photos||[]).length>=10){ toast('사진은 10장까지 넣을 수 있어요'); return; }
   toast('사진을 올리는 중…', 8000);
-  try{ const data=await photoData(file); await store().addPhoto({id:uid(), data, createdAt:Date.now()}); S.photoIdx=S.photos.length-1; toast('사진을 넣었어요'); render(); }
-  catch(e){ const why = e&&e.code==='full' ? '이 기기 저장 공간이 부족해요' : e&&e.code==='decode' ? '이 사진 형식을 읽지 못했어요. 다른 사진이나 캡처로 해보세요' : e&&e.code==='permission-denied' ? '사진을 저장할 권한이 없어요 (보안 규칙 확인 필요)' : `사진을 넣지 못했어요 (${(e&&(e.code||e.message))||'알 수 없는 오류'})`;
+  try{ localStorage.setItem('gagyebu.photoBusy', String(Date.now())); }catch(e){}
+  try{ const data=await photoData(file); try{ localStorage.removeItem('gagyebu.photoBusy'); }catch(e){} await store().addPhoto({id:uid(), data, createdAt:Date.now()}); S.photoIdx=S.photos.length-1; toast('사진을 넣었어요'); render(); }
+  catch(e){ try{ localStorage.removeItem('gagyebu.photoBusy'); }catch(_){} const why = e&&e.code==='full' ? '이 기기 저장 공간이 부족해요' : e&&e.code==='decode' ? '이 사진 형식을 읽지 못했어요. 다른 사진이나 캡처로 해보세요' : e&&e.code==='permission-denied' ? '사진을 저장할 권한이 없어요 (보안 규칙 확인 필요)' : `사진을 넣지 못했어요 (${(e&&(e.code||e.message))||'알 수 없는 오류'})`;
     toast(why, 4000); }
 }
 
@@ -1169,6 +1171,7 @@ function exportCsv(copy){
 }
 
 /* ---------------- 시작 ---------------- */
+try{ const pb=+localStorage.getItem('gagyebu.photoBusy'); if(pb){ localStorage.removeItem('gagyebu.photoBusy'); if(Date.now()-pb<120000) setTimeout(()=>toast('사진이 너무 커서 앱이 다시 시작됐어요. 사진 앱에서 캡처(스크린샷)한 사진으로 넣어 보세요.', 6000), 800); } }catch(e){}
 $('#ph-global').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; if(f) addPhoto(f); setTimeout(()=>{ e.target.value=''; },0); });
 if(S.source==='firebase'){ FireStore.init(); } else { LocalStore.load(); }
 render();
