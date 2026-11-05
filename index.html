@@ -285,7 +285,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-26';
+const APP_VERSION='2026.11.05-27';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -413,13 +413,23 @@ const FireStore = {
   },
   home(){ return this.db.collection('households').doc(CFG.householdId||'our-home'); },
   listen(){
-    this.unsub.push(this.home().collection('tx').onSnapshot(snap=>{ S.txs=snap.docs.map(d=>d.data()); render(); }, err=>{ S.fbError='데이터를 읽을 권한이 없어요. 보안 규칙에 두 사람 이메일을 넣었는지 확인해 주세요.'; render(); }));
+    this.liveStart = shiftMonth(ym(new Date()), -2)+'-01'; this.live=[]; this.old={}; this.loading={};
+    this.unsub.push(this.home().collection('tx').where('date','>=',this.liveStart).onSnapshot(snap=>{ this.live=snap.docs.map(d=>d.data()); this.merge(); render(); }, err=>{ S.fbError='데이터를 읽을 권한이 없어요. 보안 규칙에 두 사람 이메일을 넣었는지 확인해 주세요.'; render(); }));
     this.unsub.push(this.home().collection('notes').onSnapshot(snap=>{ S.notes=snap.docs.map(d=>d.data()); if(!S.editNote) render(); }, ()=>{}));
     this.unsub.push(this.home().onSnapshot(d=>{ const data=d.exists?d.data():{}; const s=data.settings; if(s) S.settings={...structuredClone(DEFAULT_SETTINGS),...s}; S.keys=data.keys||{}; render(); }, ()=>{}));
   },
-  async put(tx){ tx.by=S.user?.email||''; await this.home().collection('tx').doc(tx.id).set(tx); },
-  async putMany(txs){ const b=this.db.batch(); txs.forEach(t=>{ t.by=S.user?.email||''; b.set(this.home().collection('tx').doc(t.id), t); }); await b.commit(); },
-  async remove(id){ await this.home().collection('tx').doc(id).delete(); },
+  merge(){ const m=new Map(); [...Object.values(this.old).flat(), ...this.live].forEach(t=>m.set(t.id,t)); S.txs=[...m.values()]; },
+  ensureMonth(mo){   // 최근 3개월보다 예전 달은 볼 때만 불러와서 읽기 횟수를 아껴요
+    if(!this.db || !S.user || !mo || mo+'-01' >= this.liveStart || this.old[mo] || this.loading[mo]) return;
+    this.loading[mo]=true;
+    this.home().collection('tx').where('date','>=',mo+'-01').where('date','<=',mo+'-31').get()
+      .then(snap=>{ this.old[mo]=snap.docs.map(d=>d.data()); this.merge(); render(); })
+      .catch(()=>{}).finally(()=>{ this.loading[mo]=false; });
+  },
+  dropOld(date){ const mo=String(date||'').slice(0,7); if(this.old[mo]){ delete this.old[mo]; this.ensureMonth(mo); } },
+  async put(tx){ tx.by=S.user?.email||''; await this.home().collection('tx').doc(tx.id).set(tx); this.dropOld(tx.date); },
+  async putMany(txs){ const b=this.db.batch(); txs.forEach(t=>{ t.by=S.user?.email||''; b.set(this.home().collection('tx').doc(t.id), t); }); await b.commit(); txs.forEach(t=>this.dropOld(t.date)); },
+  async remove(id){ const t=S.txs.find(x=>x.id===id); await this.home().collection('tx').doc(id).delete(); if(t){ Object.keys(this.old).forEach(k=>{ this.old[k]=this.old[k].filter(x=>x.id!==id); }); this.merge(); render(); } },
   async removeMany(ids){ const b=this.db.batch(); ids.forEach(id=>b.delete(this.home().collection('tx').doc(id))); await b.commit(); },
   async saveSettings(s){ await this.home().set({settings:s},{merge:true}); },
   async saveKey(name,v){ await this.home().set({keys:{[name]:v}},{merge:true}); },
@@ -450,6 +460,7 @@ function render(){
   if(S.source==='firebase' && !S.ready){ app.innerHTML='<div class="empty" style="margin-top:40vh">불러오는 중…</div>'; $('#tabs').hidden=true; return; }
   if(S.source==='firebase' && !S.user && !S.fbError){ app.innerHTML=loginView(); $('#tabs').hidden=true; bindLogin(); return; }
   $('#tabs').hidden=false; renderTabs(); document.body.dataset.tab=S.tab;
+  if(S.source==='firebase'){ FireStore.ensureMonth(S.month); FireStore.ensureMonth(shiftMonth(S.month,-1)); }
   const monthNav = `<div class="month">
       <button class="iconbtn" data-act="prev" aria-label="이전 달">${svg('back')}</button>
       <h1>${monthLabel(S.month)}</h1>
