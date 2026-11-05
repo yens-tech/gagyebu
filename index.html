@@ -207,6 +207,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .slides::-webkit-scrollbar{display:none}
 .slides img{flex:0 0 100%;width:100%;height:100%;object-fit:cover;scroll-snap-align:center;max-width:none}
 .hero-btns{position:absolute;right:max(16px,env(safe-area-inset-right,0px));bottom:16px;display:grid;gap:10px}
+.hero-btns button.armed{background:var(--over)}
 .hero-btns button{width:48px;height:48px;border-radius:50%;background:color-mix(in srgb,var(--accent) 70%,transparent);color:#fff;display:grid;place-items:center;backdrop-filter:blur(4px)}
 .dots{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:center;gap:6px}
 .dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.6)}
@@ -293,6 +294,7 @@ const IC = {
   image:"M4 5h16v14H4zM4 16l4.5-4.5 3.5 3.5 2.5-2.5L20 17M15.5 9.5h.01",
   refresh:"M19.5 9A8 8 0 0 0 5 7.5M4.5 4v3.5H8M4.5 15A8 8 0 0 0 19 16.5M19.5 20v-3.5H16",
   book:"M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h11M9 8h6",
+  trash:"M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5",
   check:"M5 12.5l4.5 4.5L19 7",
   camera:"M4 8h3l1.5-2.5h7L17 8h3v11H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"
 };
@@ -485,7 +487,7 @@ function homeView(){
   if(ph.length){
     html+=`<div class="slides" id="slides">${ph.map(p=>`<img src="${p.data}" alt="우리 사진">`).join('')}</div>
       ${ph.length>1?`<div class="dots">${ph.map((p,i)=>`<i class="${i===S.photoIdx?'on':''}"></i>`).join('')}</div>`:''}
-      <div class="hero-btns">${ph.length>1?`<button data-act="photo-next" aria-label="다음 사진">${svg('refresh')}</button>`:''}<button data-act="photo-add" aria-label="사진 추가">${svg('image')}</button></div>`;
+      <div class="hero-btns"><button data-act="photo-del" class="${S.delArmed?'armed':''}" aria-label="이 사진 지우기">${svg('trash')}</button>${ph.length>1?`<button data-act="photo-next" aria-label="다음 사진">${svg('refresh')}</button>`:''}<button data-act="photo-add" aria-label="사진 추가">${svg('image')}</button></div>`;
   } else {
     html+=`<div class="hero-empty">${svg('image')}<div>우리 사진을 넣어 보세요.<br><span class="small">두 사람 폰에 함께 보여요.</span></div><button class="btn" data-act="photo-add">사진 고르기</button></div>`;
   }
@@ -830,6 +832,11 @@ document.addEventListener('click', async e=>{
     case 'scan': $('#f-photo')?.click(); break;
     case 'photo-add': $('#ph-in')?.click(); break;
     case 'photo-next': { const sl=$('#slides'); if(sl){ const n=S.photos.length, i=(S.photoIdx+1)%n; sl.scrollTo({left:sl.clientWidth*i, behavior:'smooth'}); } } break;
+    case 'photo-del': {
+      const cur=S.photos[S.photoIdx]; if(!cur) break;
+      if(!S.delArmed){ S.delArmed=true; b.classList.add('armed'); toast('한 번 더 누르면 이 사진을 지워요'); clearTimeout(S._delT); S._delT=setTimeout(()=>{ S.delArmed=false; document.querySelector('[data-act="photo-del"]')?.classList.remove('armed'); },3000); }
+      else { S.delArmed=false; await store().removePhoto(cur.id); S.photoIdx=Math.max(0,S.photoIdx-1); toast('사진을 지웠어요'); render(); }
+    } break;
     case 'bookmode': S.bookMode = S.bookMode==='cal'?'list':'cal'; render(); break;
     case 'caps': $('#f-caps')?.click(); break;
     case 'cap-close': closeCapture(); break;
