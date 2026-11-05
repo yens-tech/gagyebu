@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-15';
+const APP_VERSION='2026.11.05-16';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -584,6 +584,11 @@ function settingsView(){
     <label for="gkey">Gemini API 키 (이 폰에만 저장)</label>
     <div class="two"><input class="inp" id="gkey" type="password" autocomplete="off" placeholder="AIza로 시작하는 키" value="${esc(geminiKey())}"><button class="btn" data-act="save-key">키 저장</button></div>
     <div class="btns" style="padding:4px 0 0"><button class="btn" data-act="gem-test">Gemini 연결 확인</button></div>
+    <label for="orkey" style="margin-top:10px">OpenRouter 키 (예비, 이 폰에만 저장)</label>
+    <div class="two"><input class="inp" id="orkey" type="password" autocomplete="off" placeholder="sk-or-로 시작하는 키" value="${esc(orKey())}"><button class="btn" data-act="save-orkey">키 저장</button></div>
+    <div class="btns" style="padding:4px 0 0"><button class="btn" data-act="or-test">OpenRouter 연결 확인</button></div>
+    <div id="or-out" class="small" style="white-space:pre-wrap;line-height:1.6"></div>
+    <div class="small">Gemini가 붐비거나 응답이 없을 때 자동으로 OpenRouter 무료 모델로 읽어요. openrouter.ai 가입 → Keys → Create Key에서 무료로 받을 수 있어요(하루 50회).</div>
     <div id="gem-out" class="small" style="white-space:pre-wrap;line-height:1.6"></div>
     <div class="small">Google AI Studio(aistudio.google.com)에서 무료로 발급받을 수 있어요. ${window.STANDALONE?'':'지금 미리보기에서는 키 없이도 영수증 읽기를 써볼 수 있어요.'}</div>
   </div></div>
@@ -766,6 +771,41 @@ async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}
   }
   throw last||{code:'api'};
 }
+/* ---------- OpenRouter (예비) ---------- */
+const OR_LS='gagyebu.orKey', OR_LIST_LS='gagyebu.orModels';
+function orKey(){ let k=''; try{ k=localStorage.getItem(OR_LS)||''; }catch(e){} return k || CFG.openrouterKey || ''; }
+async function orModels(){
+  let c=null; try{ c=JSON.parse(localStorage.getItem(OR_LIST_LS)); }catch(e){}
+  if(c && c.list && c.list.length && Date.now()-c.at<86400000) return orderBusy(c.list);
+  let r; try{ r=await tfetch('https://openrouter.ai/api/v1/models',{},10000); }catch(e){ throw {code:'net'}; }
+  if(!r.ok) throw {code:'api', detail:`OpenRouter 모델 목록 ${r.status}`};
+  const j=await r.json();
+  const free=(j.data||[]).filter(m=>/:free$/.test(m.id) && ((m.architecture?.input_modalities||[]).includes('image') || /image/.test(m.architecture?.modality||'')));
+  const score=id=>(/qwen.*vl|qwen3|qwen2\.5-vl/i.test(id)?50:0)+(/gemma/i.test(id)?40:0)+(/llama-4|maverick|scout/i.test(id)?35:0)+(/mistral|pixtral/i.test(id)?30:0)+(/gemini/i.test(id)?20:0);
+  const list=free.map(m=>m.id).sort((a,b)=>score(b)-score(a)).slice(0,5);
+  if(!list.length) throw {code:'api', detail:'OpenRouter에 무료 사진 모델이 없어요'};
+  try{ localStorage.setItem(OR_LIST_LS, JSON.stringify({at:Date.now(), list})); }catch(e){}
+  return orderBusy(list);
+}
+function orderBusy(list){ let busy={}; try{ busy=JSON.parse(localStorage.getItem(GEM_BUSY_LS))||{}; }catch(e){} const hot=m=>busy[m]&&Date.now()-busy[m]<600000; return [...list.filter(m=>!hot(m)),...list.filter(hot)]; }
+async function readWithOpenRouter(blob, key, prompt, onStatus=()=>{}){
+  const url='data:image/jpeg;base64,'+await blobToB64(blob);
+  const models=await orModels(); let last=null;
+  for(const model of models.slice(0,3)){
+    onStatus(`예비 모델(${model.split('/').pop().replace(':free','')})로 읽는 중…`);
+    let r;
+    try{ r=await tfetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key,'X-Title':'Our Gagyebu'},
+      body:JSON.stringify({model, temperature:0, messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url}}]}]})},30000); }
+    catch(e){ last={code:e&&e.code==='timeout'?'timeout':'net'}; markBusy(model); continue; }
+    let j=null; try{ j=await r.json(); }catch(e){}
+    if(r.status===401||r.status===403) throw {code:'orkey', detail:j?.error?.message||''};
+    if(!r.ok){ last={code:r.status===429?'limit':'busy', detail:`OpenRouter ${r.status} ${(j?.error?.message||'').slice(0,80)}`}; markBusy(model); continue; }
+    const text=j?.choices?.[0]?.message?.content; const t=Array.isArray(text)?text.map(x=>x.text||'').join(''):String(text||'');
+    try{ return parseJson(t); }catch(e){ last={code:'api', detail:'예비 모델 응답을 해석하지 못함'}; }
+  }
+  throw last||{code:'api'};
+}
 async function readWithClaude(blob, prompt=receiptPrompt()){
   const sample = window.claude ? await window.claude.use('sample') : null;
   if(!sample) throw {code:'nokey'};
@@ -773,13 +813,20 @@ async function readWithClaude(blob, prompt=receiptPrompt()){
   catch(e){ throw {code: e.code==='not_granted'?'denied': e.code==='rate_limited'?'limit':'net'}; }
 }
 const READ_MSGS={ key:'Gemini API 키가 맞지 않아요. 설정에서 키를 다시 확인해 주세요.', limit:'오늘 무료 사용량을 다 썼어요. 직접 입력해 주세요.',
-  api:'Gemini가 사진을 처리하지 못했어요.', timeout:'Gemini가 응답하지 않아요. 잠시 뒤 다시 시도하거나 붙여넣기를 써 주세요.', busy:'Gemini 서버가 지금 붐벼요. 1~2분 뒤 다시 시도해 주세요.', nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini API 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
-const readImage = (blob, prompt, onStatus) => { const key=geminiKey(); return key && window.STANDALONE ? readWithGemini(blob,key,prompt,onStatus) : readWithClaude(blob,prompt); };
+  api:'사진을 처리하지 못했어요.', orkey:'OpenRouter 키가 맞지 않아요. 설정에서 다시 확인해 주세요.', timeout:'Gemini가 응답하지 않아요. 잠시 뒤 다시 시도하거나 붙여넣기를 써 주세요.', busy:'Gemini 서버가 지금 붐벼요. 1~2분 뒤 다시 시도해 주세요.', nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini 또는 OpenRouter 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
+async function readImage(blob, prompt, onStatus){
+  if(!window.STANDALONE && !geminiKey() && !orKey()) return readWithClaude(blob,prompt);
+  const gk=geminiKey(), ok=orKey(); let err=null;
+  if(gk){ try{ return await readWithGemini(blob,gk,prompt,onStatus); }catch(e){ err=e; } }
+  if(ok){ try{ return await readWithOpenRouter(blob,ok,prompt,onStatus); }catch(e){ if(!err||e.code==='orkey') err=e; else err={...err, detail:[err.detail,e.detail].filter(Boolean).join(' / ')}; } }
+  if(!gk && !ok) throw {code:'nokey'};
+  throw err||{code:'api'};
+}
 async function scanReceipt(file){
   F.scan='reading'; F.scanMsg=''; drawSheet();
   const blob = await shrink(file);
   let res=null, err=null;
-  try{ const key=geminiKey(); res = key && window.STANDALONE ? await readWithGemini(blob,key,receiptPrompt(),t=>{ if(F){ F.scanMsg=t; F.scanOk=true; drawSheet(); } }) : await readWithClaude(blob); }
+  try{ const key=geminiKey(); res = await readImage(blob, receiptPrompt(), t=>{ if(F){ F.scanMsg=t; F.scanOk=true; drawSheet(); } }); }
   catch(e){ err=e&&e.code||'api'; F.scanDetail=e&&e.detail||''; }
   if(!F) return; // 그 사이 닫음
   F.scan='';
@@ -814,6 +861,19 @@ async function geminiTest(){
     }catch(e){ lines[i]= e&&e.code==='timeout' ? `${m}: 20초 동안 응답 없음` : `${m}: 연결 실패`; }
     show();
   }
+}
+
+async function orTest(){
+  const out=$('#or-out'), key=($('#orkey')?.value||'').trim()||orKey(); if(!key){ out.textContent='먼저 키를 넣고 키 저장을 눌러 주세요.'; return; }
+  out.textContent='무료 사진 모델 찾는 중…';
+  let models; try{ try{ localStorage.removeItem(OR_LIST_LS); }catch(e){} models=await orModels(); }catch(e){ out.textContent=`모델 목록 실패: ${e.detail||e.code}`; return; }
+  const lines=[`무료 사진 모델: ${models.join(', ')}`];
+  for(const m of models.slice(0,2)){ const i=lines.push(`${m}: 확인 중…`)-1; out.textContent=lines.join('\n'); const t0=Date.now();
+    try{ const r=await tfetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:m,messages:[{role:'user',content:'{"ok":true} 이 JSON만 답하세요'}]})},30000);
+      let j=null; try{ j=await r.json(); }catch(e){}
+      lines[i]= r.ok ? `${m}: 성공 (${((Date.now()-t0)/1000).toFixed(1)}초)` : `${m}: 실패 ${r.status} ${(j?.error?.message||'').slice(0,100)}`;
+    }catch(e){ lines[i]=`${m}: ${e&&e.code==='timeout'?'30초 동안 응답 없음':'연결 실패'}`; }
+    out.textContent=lines.join('\n'); }
 }
 
 /* ---------------- 결제내역 캡처 (여러 건) ---------------- */
@@ -1027,6 +1087,8 @@ document.addEventListener('click', async e=>{
     case 'cap-save': saveCapture(); break;
     case 'cap-read': readPasted(); break;
     case 'gem-test': geminiTest(); break;
+    case 'save-orkey': { const v=$('#orkey').value.trim(); try{ v?localStorage.setItem(OR_LS,v):localStorage.removeItem(OR_LS); toast(v?'키를 저장했어요':'키를 지웠어요'); }catch(e){ toast('저장할 수 없어요'); } } break;
+    case 'or-test': orTest(); break;
     case 'paste': { const who=F.who; closeSheet(); openPaste(who); } break;
     case 'cap-retry': { const fs=R.files, w=R.who; startCapture(fs,w); } break;
     case 'close': closeSheet(); break;
