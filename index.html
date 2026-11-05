@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-12';
+const APP_VERSION='2026.11.05-13';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -697,7 +697,8 @@ async function shrink(file){
 }
 const blobToB64 = b => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); });
 function parseJson(t){ t=String(t||'').trim().replace(/^```(json)?/,'').replace(/```$/,''); const a=t.indexOf('{'), b=t.lastIndexOf('}'); return JSON.parse(t.slice(a,b+1)); }
-const GEM_MODEL_LS='gagyebu.geminiModel', GEM_LIST_LS='gagyebu.geminiModels';
+const GEM_MODEL_LS='gagyebu.geminiModel', GEM_LIST_LS='gagyebu.geminiModels', GEM_BUSY_LS='gagyebu.geminiBusy';
+function markBusy(m){ try{ const b=JSON.parse(localStorage.getItem(GEM_BUSY_LS)||'{}'); b[m]=Date.now(); localStorage.setItem(GEM_BUSY_LS, JSON.stringify(b)); }catch(e){} }
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 async function listGeminiModels(key){
   let r; try{ r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`); }catch(e){ throw {code:'net'}; }
@@ -708,7 +709,7 @@ async function listGeminiModels(key){
     .filter(n=>/gemini/.test(n) && !/image|tts|live|audio|embedding|robotics|computer/.test(n));
   const ver=n=>parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/)||[])[1])||0;
   const score=n=>(/flash/.test(n)?1000:0)+(/lite/.test(n)?-300:0)+(/preview|exp/.test(n)?-500:0)+(/pro/.test(n)?-100:0)+ver(n)*10;
-  const list=names.sort((a,b)=>score(b)-score(a)).slice(0,5);
+  const list=names.sort((a,b)=>score(b)-score(a)).slice(0,6);
   if(!list.length) throw {code:'api', detail:'쓸 수 있는 모델이 없어요'};
   try{ localStorage.setItem(GEM_LIST_LS, JSON.stringify({at:Date.now(), list})); }catch(e){}
   return list;
@@ -718,7 +719,10 @@ async function geminiModels(key){
   let cached=null; try{ cached=JSON.parse(localStorage.getItem(GEM_LIST_LS)); }catch(e){}
   const list = cached && cached.list && Date.now()-cached.at < 7*86400000 ? cached.list : await listGeminiModels(key);
   let pref=''; try{ pref=localStorage.getItem(GEM_MODEL_LS)||''; }catch(e){}
-  return pref && list.includes(pref) ? [pref, ...list.filter(m=>m!==pref)] : list;
+  let ordered = pref && list.includes(pref) ? [pref, ...list.filter(m=>m!==pref)] : list;
+  let busy={}; try{ busy=JSON.parse(localStorage.getItem(GEM_BUSY_LS))||{}; }catch(e){}
+  const now=Date.now(), hot=m=>busy[m] && now-busy[m]<600000;
+  return [...ordered.filter(m=>!hot(m)), ...ordered.filter(hot)];
 }
 const GEM_NOTHINK_LS='gagyebu.geminiNoThinkCfg';
 function thinkCfg(model){ let off=''; try{ off=localStorage.getItem(GEM_NOTHINK_LS)||''; }catch(e){} if(off.split(',').includes(model)) return null;
@@ -726,9 +730,11 @@ function thinkCfg(model){ let off=''; try{ off=localStorage.getItem(GEM_NOTHINK_
 async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}){
   const b64=await blobToB64(blob);
   let models=await geminiModels(key), last=null, refreshed=false;
-  for(let mi=0; mi<models.length && mi<3; mi++){
-    const model=models[mi];
-    for(let attempt=0; attempt<2; attempt++){
+  const tries=[...models.slice(0,4), ...models.slice(0,2)]; let waited=false;
+  for(let mi=0; mi<tries.length; mi++){
+    const model=tries[mi];
+    if(mi===Math.min(4,models.length) && !waited){ waited=true; onStatus('모든 모델이 붐벼요. 잠깐 기다렸다 다시 시도하는 중…'); await sleep(4000); }
+    for(let attempt=0; attempt<1; attempt++){
       let r;
       try{
         r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
@@ -746,12 +752,11 @@ async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}
       }
       const msg=j?.error?.message||'';
       if(r.status===400 && /thinking/i.test(msg) && thinkCfg(model)){ try{ const o=localStorage.getItem(GEM_NOTHINK_LS)||''; localStorage.setItem(GEM_NOTHINK_LS, o?o+','+model:model); }catch(e){} attempt--; continue; }
-      if(r.status===404){ if(!refreshed){ refreshed=true; try{ localStorage.removeItem(GEM_LIST_LS); }catch(e){} models=await listGeminiModels(key); mi=-1; } last={code:'api',detail:`404 ${msg}`}; break; }
+      if(r.status===404){ if(!refreshed){ refreshed=true; try{ localStorage.removeItem(GEM_LIST_LS); }catch(e){} models=await listGeminiModels(key); tries.splice(0,tries.length,...models.slice(0,4),...models.slice(0,2)); mi=-1; } last={code:'api',detail:`404 ${msg}`}; break; }
       if(r.status===401||r.status===403||/API key|API_KEY/i.test(msg)) throw {code:'key', detail:msg};
       if(r.status===429){ last={code:'limit'}; break; }            // 이 모델 오늘 한도 → 다음 모델
       if(r.status===503||r.status===500||r.status===504){            // 서버 붐빔 → 잠깐 쉬고 재시도, 그다음 다른 모델
-        last={code:'busy'}; onStatus(`Gemini 서버가 붐벼서 다시 시도하는 중… (${mi+1}/${Math.min(3,models.length)})`);
-        await sleep(attempt===0?2500:5000); continue; }
+        last={code:'busy'}; markBusy(model); onStatus(`${model} 이(가) 붐벼서 다른 모델로 바꾸는 중…`); break; }
       throw {code:'api', detail:`${r.status} ${msg}`.trim()};
     }
   }
