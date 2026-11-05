@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-17';
+const APP_VERSION='2026.11.05-18';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -388,13 +388,14 @@ const FireStore = {
   listen(){
     this.unsub.push(this.home().collection('tx').onSnapshot(snap=>{ S.txs=snap.docs.map(d=>d.data()); render(); }, err=>{ S.fbError='데이터를 읽을 권한이 없어요. 보안 규칙에 두 사람 이메일을 넣었는지 확인해 주세요.'; render(); }));
     this.unsub.push(this.home().collection('photos').orderBy('createdAt').onSnapshot(snap=>{ S.photos=snap.docs.map(d=>d.data()); render(); }, ()=>{}));
-    this.unsub.push(this.home().onSnapshot(d=>{ const s=d.exists?d.data().settings:null; if(s) S.settings={...structuredClone(DEFAULT_SETTINGS),...s}; render(); }, ()=>{}));
+    this.unsub.push(this.home().onSnapshot(d=>{ const data=d.exists?d.data():{}; const s=data.settings; if(s) S.settings={...structuredClone(DEFAULT_SETTINGS),...s}; S.keys=data.keys||{}; render(); }, ()=>{}));
   },
   async put(tx){ tx.by=S.user?.email||''; await this.home().collection('tx').doc(tx.id).set(tx); },
   async putMany(txs){ const b=this.db.batch(); txs.forEach(t=>{ t.by=S.user?.email||''; b.set(this.home().collection('tx').doc(t.id), t); }); await b.commit(); },
   async remove(id){ await this.home().collection('tx').doc(id).delete(); },
   async removeMany(ids){ const b=this.db.batch(); ids.forEach(id=>b.delete(this.home().collection('tx').doc(id))); await b.commit(); },
   async saveSettings(s){ await this.home().set({settings:s},{merge:true}); },
+  async saveKey(name,v){ await this.home().set({keys:{[name]:v}},{merge:true}); },
   async addPhoto(p){ await this.home().collection('photos').doc(p.id).set(p); },
   async removePhoto(id){ await this.home().collection('photos').doc(id).delete(); },
   async login(email,pw){ await this.auth.signInWithEmailAndPassword(email,pw); },
@@ -581,10 +582,10 @@ function settingsView(){
     ${(S.photos||[]).length?`<div class="thumbs">${S.photos.map(p=>`<div class="thumb"><img src="${p.data}" alt=""><button data-delphoto="${esc(p.id)}" aria-label="사진 지우기">${svg('close')}</button></div>`).join('')}</div>`:'<div class="small">아직 넣은 사진이 없어요. 홈 화면에서 넣을 수 있어요.</div>'}
     <div class="small">사진은 10장까지, 두 사람 폰에 함께 보여요.</div></div></div>
   <h2 class="sec-h">영수증 자동 입력</h2><div class="card"><div class="field">
-    <label for="gkey">Gemini API 키 (이 폰에만 저장)</label>
+    <label for="gkey">Gemini API 키 (두 사람이 함께 사용)</label>
     <div class="two"><input class="inp" id="gkey" type="password" autocomplete="off" placeholder="AIza로 시작하는 키" value="${esc(geminiKey())}"><button class="btn" data-act="save-key">키 저장</button></div>
     <div class="btns" style="padding:4px 0 0"><button class="btn" data-act="gem-test">Gemini 연결 확인</button></div>
-    <label for="orkey" style="margin-top:10px">OpenRouter 키 (예비, 이 폰에만 저장)</label>
+    <label for="orkey" style="margin-top:10px">OpenRouter 키 (예비, 두 사람이 함께 사용)</label>
     <div class="two"><input class="inp" id="orkey" type="password" autocomplete="off" placeholder="sk-or-로 시작하는 키" value="${esc(orKey())}"><button class="btn" data-act="save-orkey">키 저장</button></div>
     <div class="btns" style="padding:4px 0 0"><button class="btn" data-act="or-test">OpenRouter 연결 확인</button></div>
     <div id="or-out" class="small" style="white-space:pre-wrap;line-height:1.6"></div>
@@ -686,7 +687,7 @@ async function saveTx(){
 
 /* ---------------- 영수증 읽기 ---------------- */
 const GEMINI_LS='gagyebu.geminiKey';
-function geminiKey(){ let k=''; try{ k=localStorage.getItem(GEMINI_LS)||''; }catch(e){} return k || CFG.geminiKey || ''; }
+function geminiKey(){ let k=''; try{ k=localStorage.getItem(GEMINI_LS)||''; }catch(e){} return (S.keys&&S.keys.gemini) || k || CFG.geminiKey || ''; }
 function receiptPrompt(){
   const cats=catsOf('out').map(([k,l])=>`${k}=${l}`).join(', ');
   return `이 사진은 한국 영수증(또는 카드 결제 내역 화면)입니다. 아래 JSON 하나만 답하세요. 다른 글은 쓰지 마세요.
@@ -774,7 +775,7 @@ async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}
 }
 /* ---------- OpenRouter (예비) ---------- */
 const OR_LS='gagyebu.orKey', OR_LIST_LS='gagyebu.orModels';
-function orKey(){ let k=''; try{ k=localStorage.getItem(OR_LS)||''; }catch(e){} return k || CFG.openrouterKey || ''; }
+function orKey(){ let k=''; try{ k=localStorage.getItem(OR_LS)||''; }catch(e){} return (S.keys&&S.keys.openrouter) || k || CFG.openrouterKey || ''; }
 async function orModels(){
   let c=null; try{ c=JSON.parse(localStorage.getItem(OR_LIST_LS)); }catch(e){}
   if(c && c.list && c.list.length && Date.now()-c.at<86400000) return orderBusy(c.list);
@@ -842,6 +843,11 @@ async function scanReceipt(file){
   drawSheet();
 }
 
+async function saveApiKey(name, lsKey, v){
+  try{ v?localStorage.setItem(lsKey,v):localStorage.removeItem(lsKey); }catch(e){}
+  if(S.source==='firebase'){ try{ await FireStore.saveKey(name, v||''); S.keys={...(S.keys||{}),[name]:v||''}; toast(v?'키를 저장했어요. 두 사람 폰에 함께 적용돼요':'키를 지웠어요'); }catch(e){ toast('이 폰에만 저장했어요 (공유 저장 실패)'); } }
+  else toast(v?'키를 저장했어요':'키를 지웠어요');
+}
 async function geminiTest(){
   const out=$('#gem-out'), key=($('#gkey')?.value||'').trim()||geminiKey();
   if(!key){ out.textContent='먼저 키를 넣고 키 저장을 눌러 주세요.'; return; }
@@ -1095,7 +1101,7 @@ document.addEventListener('click', async e=>{
     case 'cap-save': saveCapture(); break;
     case 'cap-read': readPasted(); break;
     case 'gem-test': geminiTest(); break;
-    case 'save-orkey': { const v=$('#orkey').value.trim(); try{ v?localStorage.setItem(OR_LS,v):localStorage.removeItem(OR_LS); toast(v?'키를 저장했어요':'키를 지웠어요'); }catch(e){ toast('저장할 수 없어요'); } } break;
+    case 'save-orkey': saveApiKey('openrouter', OR_LS, $('#orkey').value.trim()); break;
     case 'or-test': orTest(); break;
     case 'paste': { const who=F.who; closeSheet(); openPaste(who); } break;
     case 'cap-retry': { const fs=R.files, w=R.who; startCapture(fs,w); } break;
@@ -1118,7 +1124,7 @@ function bindSettings(){
     const s={...S.settings, names:{a:$('#nm-a').value.trim()||'나', b:$('#nm-b').value.trim()||'배우자'}, budget:+bud.value.replace(/\D/g,''), anniv:$('#anniv').value};
     try{ await store().saveSettings(s); toast('설정을 저장했어요'); }catch(e){ toast('저장하지 못했어요'); }
   };
-  document.querySelector('[data-act="save-key"]').onclick=()=>{ const v=$('#gkey').value.trim(); try{ v?localStorage.setItem(GEMINI_LS,v):localStorage.removeItem(GEMINI_LS); toast(v?'키를 저장했어요':'키를 지웠어요'); }catch(e){ toast('이 브라우저에서는 저장할 수 없어요'); } };
+  document.querySelector('[data-act="save-key"]').onclick=()=>saveApiKey('gemini', GEMINI_LS, $('#gkey').value.trim());
   document.querySelector('[data-act="addcat"]').onclick=async ()=>{
     const label=$('#newcat').value.trim(); if(!label) return;
     const s={...S.settings, customCats:[...(S.settings.customCats||[]), {key:'c_'+uid(), label, type:'out'}]};
