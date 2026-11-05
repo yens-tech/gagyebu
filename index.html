@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-14';
+const APP_VERSION='2026.11.05-15';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -702,8 +702,10 @@ function parseJson(t){ t=String(t||'').trim().replace(/^```(json)?/,'').replace(
 const GEM_MODEL_LS='gagyebu.geminiModel', GEM_LIST_LS='gagyebu.geminiModels', GEM_BUSY_LS='gagyebu.geminiBusy';
 function markBusy(m){ try{ const b=JSON.parse(localStorage.getItem(GEM_BUSY_LS)||'{}'); b[m]=Date.now(); localStorage.setItem(GEM_BUSY_LS, JSON.stringify(b)); }catch(e){} }
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function tfetch(url, opts={}, ms=20000){ const c=new AbortController(); const t=setTimeout(()=>c.abort(), ms);
+  try{ return await fetch(url, {...opts, signal:c.signal}); } catch(e){ if(c.signal.aborted) throw {code:'timeout'}; throw e; } finally{ clearTimeout(t); } }
 async function listGeminiModels(key){
-  let r; try{ r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`); }catch(e){ throw {code:'net'}; }
+  let r; try{ r=await tfetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`,{},10000); }catch(e){ throw {code:e&&e.code==='timeout'?'timeout':'net'}; }
   if(r.status===400||r.status===401||r.status===403) throw {code:'key'};
   if(!r.ok) throw {code:'api', detail:`모델 목록 ${r.status}`};
   const j=await r.json();
@@ -739,12 +741,12 @@ async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}
     for(let attempt=0; attempt<1; attempt++){
       let r;
       try{
-        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+        r = await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ contents:[{parts:[{text:prompt},{inline_data:{mime_type:blob.type||'image/jpeg', data:b64}}]}],
             generationConfig:Object.assign({ responseMimeType:'application/json', temperature:0 }, thinkCfg(model)?{thinkingConfig:thinkCfg(model)}:{}) })
-        });
-      }catch(e){ last={code:'net'}; break; }
+        }, 20000);
+      }catch(e){ if(e&&e.code==='timeout'){ last={code:'timeout'}; markBusy(model); onStatus(`${model} 응답이 늦어서 다른 모델로 바꾸는 중…`); break; } last={code:'net'}; break; }
       let j=null; try{ j=await r.json(); }catch(e){}
       if(r.ok){
         const text=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
@@ -771,7 +773,7 @@ async function readWithClaude(blob, prompt=receiptPrompt()){
   catch(e){ throw {code: e.code==='not_granted'?'denied': e.code==='rate_limited'?'limit':'net'}; }
 }
 const READ_MSGS={ key:'Gemini API 키가 맞지 않아요. 설정에서 키를 다시 확인해 주세요.', limit:'오늘 무료 사용량을 다 썼어요. 직접 입력해 주세요.',
-  api:'Gemini가 사진을 처리하지 못했어요.', busy:'Gemini 서버가 지금 붐벼요. 1~2분 뒤 다시 시도해 주세요.', nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini API 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
+  api:'Gemini가 사진을 처리하지 못했어요.', timeout:'Gemini가 응답하지 않아요. 잠시 뒤 다시 시도하거나 붙여넣기를 써 주세요.', busy:'Gemini 서버가 지금 붐벼요. 1~2분 뒤 다시 시도해 주세요.', nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini API 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
 const readImage = (blob, prompt, onStatus) => { const key=geminiKey(); return key && window.STANDALONE ? readWithGemini(blob,key,prompt,onStatus) : readWithClaude(blob,prompt); };
 async function scanReceipt(file){
   F.scan='reading'; F.scanMsg=''; drawSheet();
@@ -798,18 +800,18 @@ async function geminiTest(){
   const lines=[]; const show=()=>{ out.textContent=lines.join('\n'); };
   lines.push('모델 목록 확인 중…'); show();
   let models; try{ try{ localStorage.removeItem(GEM_LIST_LS); }catch(e){} models=await listGeminiModels(key); lines[0]=`쓸 수 있는 모델: ${models.join(', ')}`; }
-  catch(e){ lines[0]= e.code==='key' ? '키가 맞지 않아요. AI Studio에서 키를 다시 복사해 주세요.' : e.code==='net' ? 'Gemini 서버에 연결하지 못했어요.' : `모델 목록 실패: ${e.detail||e.code}`; show(); return; }
+  catch(e){ lines[0]= e.code==='timeout' ? '모델 목록 응답이 없어요 (10초)' : e.code==='key' ? '키가 맞지 않아요. AI Studio에서 키를 다시 복사해 주세요.' : e.code==='net' ? 'Gemini 서버에 연결하지 못했어요.' : `모델 목록 실패: ${e.detail||e.code}`; show(); return; }
   show();
   for(const m of models.slice(0,4)){
     const i=lines.push(`${m}: 확인 중…`)-1; show(); const t0=Date.now();
     try{
       const body={contents:[{parts:[{text:'다음 JSON만 답하세요: {"ok":true}'}]}], generationConfig:Object.assign({responseMimeType:'application/json',temperature:0}, thinkCfg(m)?{thinkingConfig:thinkCfg(m)}:{})};
-      let r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      let r=await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},20000);
       let j=null; try{ j=await r.json(); }catch(e){}
-      if(r.status===400 && /thinking/i.test(j?.error?.message||'')){ delete body.generationConfig.thinkingConfig; r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); j=null; try{ j=await r.json(); }catch(e){} }
+      if(r.status===400 && /thinking/i.test(j?.error?.message||'')){ delete body.generationConfig.thinkingConfig; r=await tfetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},20000); j=null; try{ j=await r.json(); }catch(e){} }
       const sec=((Date.now()-t0)/1000).toFixed(1);
       lines[i] = r.ok ? `${m}: 성공 (${sec}초)` : `${m}: 실패 ${r.status} ${(j?.error?.message||'').slice(0,120)}`;
-    }catch(e){ lines[i]=`${m}: 연결 실패`; }
+    }catch(e){ lines[i]= e&&e.code==='timeout' ? `${m}: 20초 동안 응답 없음` : `${m}: 연결 실패`; }
     show();
   }
 }
@@ -943,7 +945,7 @@ function drawCapture(){
       카드·은행 문자를 복사해서 붙여넣어도 돼요.</div>
       <textarea id="cap-text" class="inp" rows="12" placeholder="여기에 길게 눌러 붙여넣기" style="font-size:15px;line-height:1.5;resize:vertical">${esc(R.text||'')}</textarea>
       ${R.err?`<div class="scan-msg bad">${esc(R.err)}</div>`:''}`;
-  else if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small num">${R.sec?R.sec+'초 지남 · ':''}${esc(R.note||'보통 한 장에 5~10초')}</span></div>`;
+  else if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small num">${R.sec?R.sec+'초 지남 · ':''}${esc(R.note||'보통 한 장에 5~10초')}</span><button class="btn" data-act="cap-close" style="margin-top:12px">취소</button></div>`;
   else {
     body=`<div class="cap-sum"><b>${R.items.length}건</b>을 찾았어요${R.removed?` · 중복 <b>${R.removed}건</b>은 뺐어요`:''}</div>`;
     if(R.err) body+=`<div class="scan-msg bad" style="padding:0 4px 8px">${esc(R.err)}</div>`;
