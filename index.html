@@ -257,7 +257,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-9';
+const APP_VERSION='2026.11.05-10';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -694,44 +694,61 @@ async function shrink(file){
 }
 const blobToB64 = b => new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result).split(',')[1]); r.onerror=rej; r.readAsDataURL(b); });
 function parseJson(t){ t=String(t||'').trim().replace(/^```(json)?/,'').replace(/```$/,''); const a=t.indexOf('{'), b=t.lastIndexOf('}'); return JSON.parse(t.slice(a,b+1)); }
-const GEM_MODEL_LS='gagyebu.geminiModel';
-async function pickGeminiModel(key){
-  const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`);
+const GEM_MODEL_LS='gagyebu.geminiModel', GEM_LIST_LS='gagyebu.geminiModels';
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function listGeminiModels(key){
+  let r; try{ r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`); }catch(e){ throw {code:'net'}; }
   if(r.status===400||r.status===401||r.status===403) throw {code:'key'};
   if(!r.ok) throw {code:'api', detail:`모델 목록 ${r.status}`};
   const j=await r.json();
-  const ok=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.replace(/^models\//,''));
-  const score=n=>(/flash/.test(n)?100:0)-(/lite|image|tts|live|audio|preview|exp|thinking|embedding/.test(n)?50:0)+(parseFloat((n.match(/(\d+(?:\.\d+)?)/)||[])[1])||0);
-  const best=ok.sort((a,b)=>score(b)-score(a))[0];
-  if(!best) throw {code:'api', detail:'쓸 수 있는 모델이 없어요'};
-  try{ localStorage.setItem(GEM_MODEL_LS,best); }catch(e){}
-  return best;
+  const names=(j.models||[]).filter(m=>(m.supportedGenerationMethods||[]).includes('generateContent')).map(m=>m.name.replace(/^models\//,''))
+    .filter(n=>/gemini/.test(n) && !/image|tts|live|audio|embedding|robotics|computer/.test(n));
+  const ver=n=>parseFloat((n.match(/gemini-(\d+(?:\.\d+)?)/)||[])[1])||0;
+  const score=n=>(/flash/.test(n)?1000:0)+(/lite/.test(n)?-300:0)+(/preview|exp/.test(n)?-500:0)+(/pro/.test(n)?-100:0)+ver(n)*10;
+  const list=names.sort((a,b)=>score(b)-score(a)).slice(0,5);
+  if(!list.length) throw {code:'api', detail:'쓸 수 있는 모델이 없어요'};
+  try{ localStorage.setItem(GEM_LIST_LS, JSON.stringify({at:Date.now(), list})); }catch(e){}
+  return list;
 }
-async function readWithGemini(blob, key, prompt=receiptPrompt()){
+async function geminiModels(key){
+  if(CFG.geminiModel) return [CFG.geminiModel];
+  let cached=null; try{ cached=JSON.parse(localStorage.getItem(GEM_LIST_LS)); }catch(e){}
+  const list = cached && cached.list && Date.now()-cached.at < 7*86400000 ? cached.list : await listGeminiModels(key);
+  let pref=''; try{ pref=localStorage.getItem(GEM_MODEL_LS)||''; }catch(e){}
+  return pref && list.includes(pref) ? [pref, ...list.filter(m=>m!==pref)] : list;
+}
+async function readWithGemini(blob, key, prompt=receiptPrompt(), onStatus=()=>{}){
   const b64=await blobToB64(blob);
-  let model=CFG.geminiModel; if(!model){ try{ model=localStorage.getItem(GEM_MODEL_LS); }catch(e){} }
-  if(!model) model=await pickGeminiModel(key);
-  for(let attempt=0; attempt<2; attempt++){
-    let r;
-    try{
-      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ contents:[{parts:[{text:prompt},{inline_data:{mime_type:blob.type||'image/jpeg', data:b64}}]}],
-          generationConfig:{ responseMimeType:'application/json', temperature:0 } })
-      });
-    }catch(e){ throw {code:'net'}; }
-    if(r.status===404 && attempt===0){ try{ localStorage.removeItem(GEM_MODEL_LS); }catch(e){} model=await pickGeminiModel(key); continue; }
-    let j=null; try{ j=await r.json(); }catch(e){}
-    if(!r.ok){
+  let models=await geminiModels(key), last=null, refreshed=false;
+  for(let mi=0; mi<models.length && mi<3; mi++){
+    const model=models[mi];
+    for(let attempt=0; attempt<2; attempt++){
+      let r;
+      try{
+        r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ contents:[{parts:[{text:prompt},{inline_data:{mime_type:blob.type||'image/jpeg', data:b64}}]}],
+            generationConfig:{ responseMimeType:'application/json', temperature:0 } })
+        });
+      }catch(e){ last={code:'net'}; break; }
+      let j=null; try{ j=await r.json(); }catch(e){}
+      if(r.ok){
+        const text=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
+        if(!text){ last={code:'api', detail: j?.promptFeedback?.blockReason ? `차단됨: ${j.promptFeedback.blockReason}` : '빈 응답'}; break; }
+        try{ const out=parseJson(text); try{ localStorage.setItem(GEM_MODEL_LS, model); }catch(e){} return out; }
+        catch(e){ last={code:'api', detail:'응답을 해석하지 못함'}; break; }
+      }
       const msg=j?.error?.message||'';
-      if(r.status===429) throw {code:'limit'};
-      if(/API key|API_KEY|permission|PERMISSION_DENIED/i.test(msg) || r.status===401 || r.status===403) throw {code:'key', detail:msg};
+      if(r.status===404){ if(!refreshed){ refreshed=true; try{ localStorage.removeItem(GEM_LIST_LS); }catch(e){} models=await listGeminiModels(key); mi=-1; } last={code:'api',detail:`404 ${msg}`}; break; }
+      if(r.status===401||r.status===403||/API key|API_KEY/i.test(msg)) throw {code:'key', detail:msg};
+      if(r.status===429){ last={code:'limit'}; break; }            // 이 모델 오늘 한도 → 다음 모델
+      if(r.status===503||r.status===500||r.status===504){            // 서버 붐빔 → 잠깐 쉬고 재시도, 그다음 다른 모델
+        last={code:'busy'}; onStatus(`Gemini 서버가 붐벼서 다시 시도하는 중… (${mi+1}/${Math.min(3,models.length)})`);
+        await sleep(attempt===0?2500:5000); continue; }
       throw {code:'api', detail:`${r.status} ${msg}`.trim()};
     }
-    const text=(j?.candidates?.[0]?.content?.parts||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');
-    if(!text) throw {code:'api', detail: j?.promptFeedback?.blockReason ? `차단됨: ${j.promptFeedback.blockReason}` : '빈 응답'};
-    try{ return parseJson(text); }catch(e){ throw {code:'api', detail:'응답을 해석하지 못함'}; }
   }
+  throw last||{code:'api'};
 }
 async function readWithClaude(blob, prompt=receiptPrompt()){
   const sample = window.claude ? await window.claude.use('sample') : null;
@@ -740,13 +757,13 @@ async function readWithClaude(blob, prompt=receiptPrompt()){
   catch(e){ throw {code: e.code==='not_granted'?'denied': e.code==='rate_limited'?'limit':'net'}; }
 }
 const READ_MSGS={ key:'Gemini API 키가 맞지 않아요. 설정에서 키를 다시 확인해 주세요.', limit:'오늘 무료 사용량을 다 썼어요. 직접 입력해 주세요.',
-  api:'Gemini가 사진을 처리하지 못했어요.', nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini API 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
-const readImage = (blob, prompt) => { const key=geminiKey(); return key && window.STANDALONE ? readWithGemini(blob,key,prompt) : readWithClaude(blob,prompt); };
+  api:'Gemini가 사진을 처리하지 못했어요.', busy:'Gemini 서버가 지금 붐벼요. 1~2분 뒤 다시 시도해 주세요.', nokey:'사진을 읽으려면 설정 > 영수증 자동 입력에 Gemini API 키를 넣어 주세요.', denied:'사진 읽기를 허용하지 않아서 읽지 못했어요.', net:'사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요.' };
+const readImage = (blob, prompt, onStatus) => { const key=geminiKey(); return key && window.STANDALONE ? readWithGemini(blob,key,prompt,onStatus) : readWithClaude(blob,prompt); };
 async function scanReceipt(file){
   F.scan='reading'; F.scanMsg=''; drawSheet();
   const blob = await shrink(file);
   let res=null, err=null;
-  try{ const key=geminiKey(); res = key && window.STANDALONE ? await readWithGemini(blob,key) : await readWithClaude(blob); }
+  try{ const key=geminiKey(); res = key && window.STANDALONE ? await readWithGemini(blob,key,receiptPrompt(),t=>{ if(F){ F.scanMsg=t; F.scanOk=true; drawSheet(); } }) : await readWithClaude(blob); }
   catch(e){ err=e&&e.code||'api'; F.scanDetail=e&&e.detail||''; }
   if(!F) return; // 그 사이 닫음
   F.scan='';
@@ -781,11 +798,11 @@ function catFromHistory(merchant,type){ const n=norm(merchant); if(!n) return ''
 
 let R=null;
 async function startCapture(files, who){
-  R={status:'reading', done:0, total:files.length, who:who||S.lastWho||'us', items:[], removed:0, err:''};
+  R={status:'reading', done:0, total:files.length, who:who||S.lastWho||'us', items:[], removed:0, err:'', files, note:''};
   $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture();
   const raw=[]; const errs=[];
   for(const f of files){
-    try{ const res=await readImage(await shrink(f), capturePrompt()); (res&&Array.isArray(res.items)?res.items:[]).forEach(x=>raw.push(x)); }
+    try{ const res=await readImage(await shrink(f), capturePrompt(), t=>{ if(R){ R.note=t; drawCapture(); } }); if(R) R.note=''; (res&&Array.isArray(res.items)?res.items:[]).forEach(x=>raw.push(x)); }
     catch(e){ errs.push(e&&e.code||'api'); R.detail=e&&e.detail||String(e&&e.message||''); }
     if(!R) return; R.done++; drawCapture();
   }
@@ -821,7 +838,7 @@ function drawCapture(){
   if(!R) return;
   const names=S.settings.names, n=R.items.filter(i=>i.on).length;
   let body='';
-  if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small">한 장에 10초 정도 걸려요</span></div>`;
+  if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small">${esc(R.note||'한 장에 10초 정도 걸려요')}</span></div>`;
   else {
     body=`<div class="cap-sum"><b>${R.items.length}건</b>을 찾았어요${R.removed?` · 중복 <b>${R.removed}건</b>은 뺐어요`:''}</div>`;
     if(R.err) body+=`<div class="scan-msg bad" style="padding:0 4px 8px">${esc(R.err)}</div>`;
@@ -850,7 +867,7 @@ function drawCapture(){
   }
   $('#sheet').innerHTML=`<div class="sheet-in">
     <div class="sheet-top"><span></span><div class="cap-h">결제내역 캡처</div><button class="iconbtn" data-act="cap-close" aria-label="닫기">${svg('close')}</button></div>${body}</div>
-    ${R.status==='review'?`<div class="save-bar"><div class="save-bar-in">${R.items.length?`<button class="btn primary" data-act="cap-save" ${n?'':'disabled'}>${n?`확인 완료 · ${n}건 등록 (${sumTxt()})`:'등록할 내역을 체크해 주세요'}</button>`:`<button class="btn" data-act="cap-close">닫기</button>`}</div></div>`:''}`;
+    ${R.status==='review'?`<div class="save-bar"><div class="save-bar-in">${R.items.length?`<button class="btn primary" data-act="cap-save" ${n?'':'disabled'}>${n?`확인 완료 · ${n}건 등록 (${sumTxt()})`:'등록할 내역을 체크해 주세요'}</button>`:(R.err&&R.files?`<button class="btn" data-act="cap-close" style="flex:0 0 auto">닫기</button><button class="btn primary" data-act="cap-retry">다시 시도</button>`:`<button class="btn" data-act="cap-close">닫기</button>`)}</div></div>`:''}`;
   document.querySelectorAll('[data-cf]').forEach(el=>el.onchange=e=>{ const it=R.items[+el.dataset.i], f=el.dataset.cf;
     if(f==='amount'){ const v=+el.value.replace(/\D/g,''); it.amount=v; el.value=v?won(v):''; drawSaveBar(); }
     else { it[f]=el.value; if(f==='date') drawCapture(); } });
@@ -900,6 +917,7 @@ document.addEventListener('click', async e=>{
     case 'caps': $('#f-caps')?.click(); break;
     case 'cap-close': closeCapture(); break;
     case 'cap-save': saveCapture(); break;
+    case 'cap-retry': { const fs=R.files, w=R.who; startCapture(fs,w); } break;
     case 'close': closeSheet(); break;
     case 'save': saveTx(); break;
     case 'del': if(!F.armed){ F.armed=true; drawSheet(); } else { try{ await store().remove(F.id); closeSheet(); toast('삭제했어요'); }catch(e){ $('#f-err').textContent='삭제하지 못했어요. 다시 시도해 주세요.'; } } break;
