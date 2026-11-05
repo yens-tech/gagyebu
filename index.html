@@ -314,7 +314,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-37';
+const APP_VERSION='2026.11.05-38';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -342,7 +342,7 @@ const IC = {
   hobby:"M12 3a9 9 0 1 0 0 18c1 0 1.6-.8 1.2-1.7-.4-1 .3-2.3 1.6-2.3H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10zM7.5 11h.01M10 7.5h.01M15 7.8h.01",
   travel:"M4 8h16v11H4zM9 8V5h6v3M8.5 8v11M15.5 8v11",
   date:"M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z",
-  alcohol:"M6 8.5h9V20H6zM15 11h2a2 2 0 0 1 2 2v2.5a2 2 0 0 1-2 2h-2M9 11.5v5.5M12 11.5v5.5M6 8.5a2.2 2.2 0 0 1 2.3-3.3 2.6 2.6 0 0 1 4.6 0A2.2 2.2 0 0 1 15 8.5",
+  alcohol:"M4 17h16M5 17a7 7 0 0 1 14 0M12 8V6.5M10.5 6.5h3M3 20h18",
   edu:"M3 9.5l9-4.5 9 4.5-9 4.5zM7 11.5v4.2c3 2 7 2 10 0v-4.2M21 9.5v5",
   dues:"M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 20c0-3 2.5-5 5.5-5s5.5 2 5.5 5M16 5.2a3 3 0 0 1 0 5.6M18 15.2c1.8.6 2.8 2.2 2.8 4.8",
   gift:"M4 10.5h16V20H4zM3 7h18v3.5H3zM12 7v13M12 7c-1.5-3.6-6-3.4-5 0M12 7c1.5-3.6 6-3.4 5 0",
@@ -376,7 +376,7 @@ const OUT_CATS = [
   ['food','식비'],['cafe','카페·간식'],['delivery','배달'],['mart','생필품'],['conv','편의점'],['transport','교통'],
   ['car','차량·주유'],['housing','주거비'],['utility','공과금'],['telecom','통신'],['subs','구독'],['loan','대출이자'],
   ['insurance','보험'],['health','병원·약'],['beauty','미용'],['fashion','패션'],['culture','문화'],['play','오락'],
-  ['hobby','취미'],['travel','여행'],['date','데이트'],['alcohol','술·모임'],['edu','교육'],['dues','회비'],
+  ['hobby','취미'],['travel','여행'],['date','데이트'],['alcohol','외식'],['edu','교육'],['dues','회비'],
   ['gift','경조사·선물'],['pet','반려동물'],['etc','기타']
 ];
 const IN_CATS = [['salary','월급'],['bonus','보너스'],['side','부수입'],['allowance','용돈'],['interest','이자·배당'],['refund','환급'],['etc_in','기타']];
@@ -630,10 +630,10 @@ function weekLabel(){ const ds=weekDays(), a=ds[0], b=ds[6]; return `${a.getMont
 function slotsFor(d){ return ['b','l','d']; }
 function mealView(){
   const days=weekDays(), today=ymd(new Date()), from=ymd(days[0]), to=ymd(days[6]);
-  const food=S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&['food','delivery','conv'].includes(t.cat)).reduce((a,t)=>a+t.amount,0);
+  const food=S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&['food','delivery','conv','alcohol'].includes(t.cat)).reduce((a,t)=>a+t.amount,0);
   const lim=+S.settings.weeklyFood||0, pct=lim?Math.min(100,food/lim*100):0;
   let html=`<section class="sum" style="gap:10px"><div style="display:flex;justify-content:space-between;align-items:end;gap:8px">
-      <div><div class="sum-label">이번 주 식비 <span class="small">(식비·배달·편의점)</span></div><div class="sum-big num" style="font-size:26px">${won(food)}<small>원</small></div></div>
+      <div><div class="sum-label">이번 주 식비 <span class="small">(식비·외식·배달·편의점)</span></div><div class="sum-big num" style="font-size:26px">${won(food)}<small>원</small></div></div>
       <button class="btn" data-act="wk-limit" style="padding:8px 12px;font-size:13px">${lim?'한도 '+short(lim):'한도 정하기'}</button></div>
     ${lim?`<div class="bar ${food>lim?'over':pct>=80?'warn':''}"><i style="width:${pct}%"></i></div><div class="hint">${food>lim?`한도보다 <b class="num neg">${won(food-lim)}원</b> 더 썼어요`:`이번 주 <b class="num">${won(lim-food)}원</b> 남았어요`}</div>`:''}
     ${S.limEdit?`<div class="two"><input class="inp num" id="wk-lim-in" inputmode="numeric" value="${lim?won(lim):''}" placeholder="예: 100,000"><button class="btn primary" data-act="wk-limit-save">저장</button></div>`:''}</section>`;

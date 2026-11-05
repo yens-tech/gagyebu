@@ -8,7 +8,7 @@
 const PROJECT_ID = 'our-gagyebu-82fa6';
 const HOUSEHOLD  = 'our-home';
 const SHEET_NAME = '우리 가계부 백업';
-const CATS = {"food": "식비", "cafe": "카페·간식", "delivery": "배달", "mart": "생필품", "conv": "편의점", "transport": "교통", "car": "차량·주유", "housing": "주거비", "utility": "공과금", "telecom": "통신", "subs": "구독", "loan": "대출이자", "insurance": "보험", "health": "병원·약", "beauty": "미용", "fashion": "패션", "culture": "문화", "play": "오락", "hobby": "취미", "travel": "여행", "date": "데이트", "alcohol": "술·모임", "edu": "교육", "dues": "회비", "gift": "경조사·선물", "pet": "반려동물", "etc": "기타", "salary": "월급", "bonus": "보너스", "side": "부수입", "allowance": "용돈", "interest": "이자·배당", "refund": "환급", "etc_in": "기타"};
+const CATS = {"food": "식비", "cafe": "카페·간식", "delivery": "배달", "mart": "생필품", "conv": "편의점", "transport": "교통", "car": "차량·주유", "housing": "주거비", "utility": "공과금", "telecom": "통신", "subs": "구독", "loan": "대출이자", "insurance": "보험", "health": "병원·약", "beauty": "미용", "fashion": "패션", "culture": "문화", "play": "오락", "hobby": "취미", "travel": "여행", "date": "데이트", "alcohol": "외식", "edu": "교육", "dues": "회비", "gift": "경조사·선물", "pet": "반려동물", "etc": "기타", "salary": "월급", "bonus": "보너스", "side": "부수입", "allowance": "용돈", "interest": "이자·배당", "refund": "환급", "etc_in": "기타"};
 
 function setup() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
