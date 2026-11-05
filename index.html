@@ -259,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-16';
+const APP_VERSION='2026.11.05-17';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -647,7 +647,8 @@ function drawSheet(){
         <span><b>${F.scan==='reading'?'읽는 중…':'영수증'}</b><span>${F.scan==='reading'?'10초 정도':'사진 한 장'}</span></span></button>
       <button class="scan" data-act="caps">${svg('list')}<span><b>내역 캡처</b><span>여러 건 한 번에</span></span></button>
       <button class="scan" data-act="paste">${svg('memo')}<span><b>붙여넣기</b><span>복사한 글자로</span></span></button></div>
-      <input type="file" id="f-photo" accept="image/*" hidden><input type="file" id="f-caps" accept="image/*" multiple hidden>`:''}
+      <input type="file" id="f-photo" accept="image/*" hidden><input type="file" id="f-caps" accept="image/*" multiple hidden>
+      <div class="small" style="padding:2px 4px 6px">사진은 AI가 읽고 저장되지 않아요. 카드번호·계좌번호·잔액은 안 보이게 잘라서 올려 주세요. 붙여넣기는 폰 안에서만 처리돼요.</div>`:''}
     ${F.scanMsg?`<div class="scan-msg ${F.scanOk?'ok':'bad'}">${esc(F.scanMsg)}</div>`:''}
     <div class="row">${svg('cal')}<input type="date" id="f-date" value="${F.date}" aria-label="날짜"></div>
     <div class="row">${svg('won')}<input id="f-amt" class="amount-in num" inputmode="numeric" placeholder="0" value="${F.amount?won(F.amount):''}" aria-label="금액"><span style="color:var(--muted)">원</span></div>
@@ -908,6 +909,13 @@ const KW=[[/카드대금|카드결제대금|결제대금/,'card_bill'],
   [/식당|국밥|김밥|맥도날드|버거킹|롯데리아|맘스터치|서브웨이|분식|치킨|피자|족발|고기|식육|횟집|초밥|스시|라멘|국수|반점|짬뽕|한식|중식|일식|푸드|키친/,'food']];
 function kwCat(t,type){ if(type==='in'){ if(/급여|월급|상여|SALARY/i.test(t)) return 'salary'; if(/이자|배당/.test(t)) return 'interest'; if(/환급|환불/.test(t)) return 'refund'; return 'etc_in'; }
   for(const [re,c] of KW) if(re.test(t)) return c; return 'etc'; }
+function maskNumbers(t){
+  return String(t||'')
+    .replace(/\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,4}\b/g,'****-****')                // 카드번호
+    .replace(/\b\d{2,6}[-*]{1,3}[\d*]{2,6}[-*]{1,3}[\d*]{2,8}(?:[-*][\d*]{1,6})?\b/g,'***-****')  // 계좌번호
+    .replace(/(?<![\d,.])\d{10,16}(?![\d,])/g,'**********')                               // 붙어 있는 긴 숫자
+    .replace(/(잔액|누적)[ \t]*[\d,]+[ \t]*원?/g,'$1 ***');
+}
 function parseText(raw){
   const now=new Date(), Y=now.getFullYear(), M=now.getMonth()+1;
   const mk=(y,m,d)=>{ if(!y) y = m>M ? Y-1 : Y; if(y<100) y+=2000; return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; };
@@ -929,7 +937,7 @@ function parseText(raw){
     const from=k?recs[k-1].i+1:0, to=k<recs.length-1?recs[k+1].i:lines.length;
     const isText=l=>!META.test(l) && !dateOf(l) && !amtOf(l) && /[가-힣A-Za-z]/.test(l) && !/^(입금|출금|지출|수입|결제|취소)$/.test(l) && l.length<=40;
     let merchant=''; for(let j=r.i-1;j>=from;j--){ if(isText(lines[j])){ merchant=lines[j]; break; } }
-    if(!merchant) for(let j=r.i+1;j<to;j++){ if(isText(lines[j])){ merchant=lines[j]; break; } }
+    if(!merchant && !r.seen) for(let j=r.i+1;j<to;j++){ if(isText(lines[j])){ merchant=lines[j]; break; } }
     const ctx=lines.slice(from, Math.min(to,r.i+2)).join(' ');
     let date=r.date; if(!r.seen){ for(let j=r.i+1;j<to;j++){ const d=dateOf(lines[j]); if(d){ date=d; break; } } }   // 문자처럼 날짜가 금액 뒤에 오는 경우
     const cancel=/취소/.test(ctx);
@@ -937,15 +945,15 @@ function parseText(raw){
     let kind = (cancel||r.sign==='-'||r.sign==='−')?'cancel': (/카드대금|결제대금/.test(merchant+ctx) || (/카드/.test(ctx)&&/출금/.test(ctx)&&!/승인/.test(ctx)))?'card_bill':'pay';
     if(kind==='card_bill'&&!merchant) merchant='카드대금';
     const nm=[S.settings.names.a,S.settings.names.b].filter(Boolean);
-    if(kind==='pay' && /이체|송금/.test(ctx) || nm.some(n=>merchant.includes(n))) kind='transfer';
+    if(kind==='pay' && (/이체|송금/.test(ctx) || nm.some(n=>merchant.includes(n)))) kind='transfer';
     let cat=kwCat(merchant, isIn?'in':'out'); if(isIn && cat==='etc_in' && /\(주\)|주식회사|㈜/.test(merchant) && r.amt>=500000) cat='salary';
     out.push({date, merchant: merchant.replace(/\s*(결제|사용|승인)$/,''), amount:r.amt, type:isIn?'in':'out', kind, category:cat});
   });
   return out;
 }
-function openPaste(who){ R={status:'paste', mode:'paste', who:who||S.lastWho||'us', items:[], removed:0, err:'', text:''}; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture(); setTimeout(()=>$('#cap-text')?.focus(),50); }
+function openPaste(who){ R={status:'paste', mode:'paste', who:who||S.lastWho||'us', items:[], removed:0, err:'', text:''}; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture(); setTimeout(()=>{ const ta=$('#cap-text'); if(ta){ ta.focus(); ta.addEventListener('paste',()=>setTimeout(()=>{ ta.value=maskNumbers(ta.value); },0)); } },50); }
 function readPasted(){
-  R.text=$('#cap-text').value; const raw=parseText(R.text);
+  R.text=maskNumbers($('#cap-text').value); $('#cap-text').value=R.text; const raw=parseText(R.text);
   R.items=[]; R.removed=0; R.err=''; buildReview(raw); R.status='review';
   if(!R.items.length && !R.removed){ R.status='paste'; R.err='금액이 있는 내역을 찾지 못했어요. 결제내역 화면의 글자를 그대로 붙여넣어 주세요.'; }
   drawCapture();
@@ -1002,7 +1010,7 @@ function drawCapture(){
   if(R.status==='paste') body=`<div class="small" style="padding:6px 4px 10px;line-height:1.6">
       <b style="color:var(--fg)">아이폰</b>: 캡처 사진을 열고 오른쪽 아래 <b style="color:var(--fg)">텍스트 인식 버튼</b>(네모 안 글자 모양)을 누른 뒤 <b style="color:var(--fg)">모두 선택 → 복사</b><br>
       <b style="color:var(--fg)">갤럭시</b>: 캡처 사진을 열고 <b style="color:var(--fg)">T 버튼(텍스트 추출)</b> → <b style="color:var(--fg)">모두 선택 → 복사</b><br>
-      카드·은행 문자를 복사해서 붙여넣어도 돼요.</div>
+      카드·은행 문자를 복사해서 붙여넣어도 돼요. 붙여넣은 글자는 <b style="color:var(--fg)">어디로도 보내지 않고</b>, 카드번호·계좌번호·잔액은 자동으로 가려요.</div>
       <textarea id="cap-text" class="inp" rows="12" placeholder="여기에 길게 눌러 붙여넣기" style="font-size:15px;line-height:1.5;resize:vertical">${esc(R.text||'')}</textarea>
       ${R.err?`<div class="scan-msg bad">${esc(R.err)}</div>`:''}`;
   else if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small num">${R.sec?R.sec+'초 지남 · ':''}${esc(R.note||'보통 한 장에 5~10초')}</span><button class="btn" data-act="cap-close" style="margin-top:12px">취소</button></div>`;
