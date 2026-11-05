@@ -311,7 +311,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-34';
+const APP_VERSION='2026.11.05-35';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -627,10 +627,10 @@ function weekLabel(){ const ds=weekDays(), a=ds[0], b=ds[6]; return `${a.getMont
 function slotsFor(d){ return ['b','l','d']; }
 function mealView(){
   const days=weekDays(), today=ymd(new Date()), from=ymd(days[0]), to=ymd(days[6]);
-  const food=S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&['food','mart','delivery','conv'].includes(t.cat)).reduce((a,t)=>a+t.amount,0);
+  const food=S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&['food','delivery','conv'].includes(t.cat)).reduce((a,t)=>a+t.amount,0);
   const lim=+S.settings.weeklyFood||0, pct=lim?Math.min(100,food/lim*100):0;
   let html=`<section class="sum" style="gap:10px"><div style="display:flex;justify-content:space-between;align-items:end;gap:8px">
-      <div><div class="sum-label">이번 주 식비 <span class="small">(식비·생필품·배달·편의점)</span></div><div class="sum-big num" style="font-size:26px">${won(food)}<small>원</small></div></div>
+      <div><div class="sum-label">이번 주 식비 <span class="small">(식비·배달·편의점)</span></div><div class="sum-big num" style="font-size:26px">${won(food)}<small>원</small></div></div>
       <button class="btn" data-act="wk-limit" style="padding:8px 12px;font-size:13px">${lim?'한도 '+short(lim):'한도 정하기'}</button></div>
     ${lim?`<div class="bar ${food>lim?'over':pct>=80?'warn':''}"><i style="width:${pct}%"></i></div><div class="hint">${food>lim?`한도보다 <b class="num neg">${won(food-lim)}원</b> 더 썼어요`:`이번 주 <b class="num">${won(lim-food)}원</b> 남았어요`}</div>`:''}
     ${S.limEdit?`<div class="two"><input class="inp num" id="wk-lim-in" inputmode="numeric" value="${lim?won(lim):''}" placeholder="예: 100,000"><button class="btn primary" data-act="wk-limit-save">저장</button></div>`:''}</section>`;
