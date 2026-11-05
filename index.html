@@ -257,9 +257,10 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <nav class="tabs" id="tabs" hidden></nav>
 <div class="sheet" id="sheet" hidden></div>
 <div class="toast" id="toast" hidden></div>
+<input type="file" id="ph-global" accept="image/*" hidden>
 
 <script>
-const APP_VERSION='2026.11.05-20';
+const APP_VERSION='2026.11.05-21';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -507,7 +508,7 @@ function homeView(){
   } else {
     html+=`<div class="hero-empty">${svg('image')}<div>우리 사진을 넣어 보세요.<br><span class="small">두 사람 폰에 함께 보여요.</span></div><button class="btn" data-act="photo-add">사진 고르기</button></div>`;
   }
-  html+='<input type="file" id="ph-in" accept="image/*" hidden></section>';
+  html+='</section>';
   html+=miniSummary();
   const recent=[...S.txs].filter(t=>!t.ex).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0)).slice(0,3);
   if(recent.length) html+=`<h2 class="sec-h">최근 내역</h2><div class="items">${recent.map(itemRow).join('')}</div>`;
@@ -516,7 +517,7 @@ function homeView(){
 function bindHome(){
   const sl=$('#slides'); if(sl){ if(S.photoIdx) sl.scrollLeft=sl.clientWidth*S.photoIdx;
     sl.onscroll=()=>{ const i=Math.round(sl.scrollLeft/sl.clientWidth); if(i!==S.photoIdx){ S.photoIdx=i; document.querySelectorAll('.dots i').forEach((d,k)=>d.classList.toggle('on',k===i)); } }; }
-  const inp=$('#ph-in'); if(inp) inp.onchange=e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) addPhoto(f); };
+
 }
 async function loadBitmap(file){
   try{ return await createImageBitmap(file); }catch(e){}
@@ -1102,7 +1103,7 @@ document.addEventListener('click', async e=>{
   switch(d.act){
     case 'add': openSheet(); break;
     case 'scan': $('#f-photo')?.click(); break;
-    case 'photo-add': $('#ph-in')?.click(); break;
+    case 'photo-add': $('#ph-global').click(); break;
     case 'photo-next': { const sl=$('#slides'); if(sl){ const n=S.photos.length, i=(S.photoIdx+1)%n; sl.scrollTo({left:sl.clientWidth*i, behavior:'smooth'}); } } break;
     case 'photo-del': {
       const cur=S.photos[S.photoIdx]; if(!cur) break;
@@ -1161,6 +1162,7 @@ function exportCsv(copy){
 }
 
 /* ---------------- 시작 ---------------- */
+$('#ph-global').addEventListener('change', e=>{ const f=e.target.files&&e.target.files[0]; if(f) addPhoto(f); setTimeout(()=>{ e.target.value=''; },0); });
 if(S.source==='firebase'){ FireStore.init(); } else { LocalStore.load(); }
 render();
 if(window.STANDALONE && 'serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
