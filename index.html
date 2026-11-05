@@ -25,18 +25,18 @@
 :root{
   --bg:#F7F9F9; --surface:#FFFFFF; --chip:#EEF2F2; --line:#E2E8E7;
   --fg:#1D2626; --muted:#778584; --accent:#0E8A84; --accent-soft:#DFF2EF; --on-accent:#FFFFFF;
-  --warn:#C9781F; --over:#C94C43;
+  --warn:#C9781F; --over:#C94C43; --sat:#3D6FC4;
   --font:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --r:16px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0F1515; --surface:#172020; --chip:#212C2C; --line:#2A3635;
   --fg:#E6EEED; --muted:#8C9B9A; --accent:#3DC0B5; --accent-soft:#163734; --on-accent:#06201E;
-  --warn:#E5A052; --over:#EA766C; color-scheme:dark}}
+  --warn:#E5A052; --over:#EA766C; --sat:#7FA6E8; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0F1515; --surface:#172020; --chip:#212C2C; --line:#2A3635;
   --fg:#E6EEED; --muted:#8C9B9A; --accent:#3DC0B5; --accent-soft:#163734; --on-accent:#06201E;
-  --warn:#E5A052; --over:#EA766C; color-scheme:dark}
+  --warn:#E5A052; --over:#EA766C; --sat:#7FA6E8; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{background:var(--bg)}
 body{color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.45;-webkit-tap-highlight-color:transparent}
@@ -92,6 +92,20 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .empty{margin-top:40px;text-align:center;color:var(--muted);display:grid;gap:6px;justify-items:center}
 
 /* analysis */
+.cal{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 6px 8px;margin-top:12px}
+.cal-dow,.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cal-dow span{text-align:center;font-size:12px;color:var(--muted);padding:2px 0 8px}
+.cal-dow span:first-child,.cell.sun .d{color:var(--over)}
+.cal-dow span:last-child,.cell.sat .d{color:var(--sat)}
+.cell{display:grid;align-content:start;justify-items:center;gap:1px;min-height:62px;padding:5px 1px;border-radius:12px;min-width:0}
+.cell .d{font-size:14px;font-weight:500;width:26px;height:26px;display:grid;place-items:center;border-radius:50%}
+.cell.today .d{background:var(--chip);font-weight:700}
+.cell.sel{background:var(--accent-soft)}
+.cell.sel .d{background:var(--accent);color:var(--on-accent)}
+.cell small{font-size:10.5px;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.02em}
+.cell .o{color:var(--fg)} .cell .p{color:var(--accent)}
+.cell.blank{visibility:hidden}
+.cal-sum{display:flex;justify-content:space-between;gap:8px;padding:10px 4px 0;font-size:13px;color:var(--muted)}
 .sec-h{margin:26px 4px 10px;font-size:15px;font-weight:600}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:6px 14px}
 .crow{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;padding:10px 0}
@@ -119,7 +133,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 
 /* tab bar */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
-.tabs-in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;position:relative}
+.tabs-in{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);align-items:center;position:relative}
 .tab{display:grid;justify-items:center;gap:2px;font-size:11px;color:var(--muted);padding:6px 0}
 .tab.on{color:var(--accent)}
 .fab{position:absolute;right:4px;top:-76px;width:58px;height:58px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 6px 18px rgba(14,138,132,.32)}
@@ -329,7 +343,7 @@ function render(){
     <div class="src"><span class="dot ${S.source==='firebase'?'on':''}"></span>${S.source==='firebase'?'함께 쓰는 중':'이 기기에만 저장'}</div>
   </header>`;
   const err = S.fbError ? `<div class="example" style="background:var(--chip);color:var(--over)">${esc(S.fbError)}</div>` : '';
-  app.innerHTML = head + err + (S.tab==='list'?listView():S.tab==='stats'?statsView():settingsView());
+  app.innerHTML = head + err + (S.tab==='list'?listView():S.tab==='cal'?calendarView():S.tab==='stats'?statsView():settingsView());
   if(S.tab==='settings') bindSettings();
 }
 
@@ -352,6 +366,35 @@ function summaryCard(){
   </section>`;
 }
 
+function itemRow(t){ const c=catInfo(t.cat);
+  return `<button class="item" data-edit="${esc(t.id)}">
+    <span class="ic ${t.type==='in'?'in':''}">${svg(c.icon)}</span>
+    <span class="item-t"><b>${esc(t.memo||c.label)}</b><span><span class="who">${esc(whoName(t.who))}</span>${esc(c.label)}</span></span>
+    <span class="amt num ${t.type==='in'?'pos':''}">${t.type==='in'?'+':'−'}${won(t.amount)}</span></button>`; }
+const short = n => n>=10000 ? (Math.round(n/1000)/10).toString().replace(/\.0$/,'')+'만' : won(n);
+
+function calendarView(){
+  const [y,m]=S.month.split('-').map(Number), first=new Date(y,m-1,1).getDay(), days=new Date(y,m,0).getDate();
+  const today=ymd(new Date());
+  if(!S.selDay || !S.selDay.startsWith(S.month)) S.selDay = today.startsWith(S.month) ? today : S.month+'-01';
+  const per={}; monthTx(S.month).forEach(t=>{ const d=per[t.date]=per[t.date]||{o:0,i:0}; t.type==='in'?d.i+=t.amount:d.o+=t.amount; });
+  let cells=''; for(let i=0;i<first;i++) cells+='<span class="cell blank"></span>';
+  for(let d=1; d<=days; d++){
+    const key=`${S.month}-${String(d).padStart(2,'0')}`, v=per[key], dow=(first+d-1)%7;
+    cells+=`<button class="cell ${dow===0?'sun':dow===6?'sat':''} ${key===today?'today':''} ${key===S.selDay?'sel':''}" data-day="${key}" aria-label="${d}일">
+      <span class="d num">${d}</span>${v&&v.o?`<small class="o num">−${short(v.o)}</small>`:''}${v&&v.i?`<small class="p num">+${short(v.i)}</small>`:''}</button>`;
+  }
+  const sel=monthTx(S.month).filter(t=>t.date===S.selDay).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const so=sel.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0), si=sel.filter(t=>t.type==='in').reduce((s,t)=>s+t.amount,0);
+  const sd=new Date(S.selDay+'T00:00');
+  const {out,inc}=totals(S.month);
+  let html=`<section class="cal"><div class="cal-dow">${DOW.map(d=>`<span>${d}</span>`).join('')}</div><div class="cal-grid">${cells}</div>
+    <div class="cal-sum"><span>이번 달 지출 <b class="num" style="color:var(--fg)">${won(out)}</b></span><span>수입 <b class="num pos">${won(inc)}</b></span></div></section>`;
+  html+=`<div class="day"><div class="day-h"><span>${sd.getMonth()+1}월 ${sd.getDate()}일 ${DOW[sd.getDay()]}요일</span><span class="num">${so?'−'+won(so)+'원':''}${si?` <span class="pos">+${won(si)}원</span>`:''}</span></div>`;
+  html+= sel.length ? `<div class="items">${sel.map(itemRow).join('')}</div>` : `<div class="empty" style="margin-top:14px"><div>이날은 기록이 없어요.</div><div class="small">+ 버튼을 누르면 이 날짜로 바로 입력돼요.</div></div>`;
+  return html+'</div>';
+}
+
 function listView(){
   const tx=monthTx(S.month).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
   const hasEx=S.txs.some(t=>t.ex);
@@ -362,12 +405,7 @@ function listView(){
   for(const d of Object.keys(byDay)){
     const list=byDay[d], dt=new Date(d+'T00:00'), dayOut=list.filter(t=>t.type==='out').reduce((s,t)=>s+t.amount,0);
     html+=`<div class="day"><div class="day-h"><span>${dt.getDate()}일 ${DOW[dt.getDay()]}요일</span><span class="num">${dayOut?'−'+won(dayOut)+'원':''}</span></div><div class="items">`;
-    for(const t of list){ const c=catInfo(t.cat);
-      html+=`<button class="item" data-edit="${esc(t.id)}">
-        <span class="ic ${t.type==='in'?'in':''}">${svg(c.icon)}</span>
-        <span class="item-t"><b>${esc(t.memo||c.label)}</b><span><span class="who">${esc(whoName(t.who))}</span>${esc(c.label)}</span></span>
-        <span class="amt num ${t.type==='in'?'pos':''}">${t.type==='in'?'+':'−'}${won(t.amount)}</span></button>`;
-    }
+    html+=list.map(itemRow).join('');
     html+='</div></div>';
   }
   return html;
@@ -419,7 +457,7 @@ function settingsView(){
 
 function renderTabs(){
   const t=(k,ic,l)=>`<button class="tab ${S.tab===k?'on':''}" data-tab="${k}">${svg(ic)}<span>${l}</span></button>`;
-  $('#tabs').innerHTML=`<div class="tabs-in">${t('list','list','내역')}${t('stats','chart','분석')}${t('settings','gear','설정')}<button class="fab" data-act="add" aria-label="내역 추가">${svg('plus')}</button></div>`;
+  $('#tabs').innerHTML=`<div class="tabs-in">${t('list','list','내역')}${t('cal','cal','달력')}${t('stats','chart','분석')}${t('settings','gear','설정')}<button class="fab" data-act="add" aria-label="내역 추가">${svg('plus')}</button></div>`;
 }
 
 function loginView(){
@@ -437,7 +475,7 @@ function bindLogin(){
 /* ---------------- 입력 화면 ---------------- */
 let F=null; // 편집 중인 폼
 function openSheet(tx){
-  F = tx ? {...tx} : {id:uid(), type:'out', date:ymd(new Date()), amount:0, who:S.lastWho||'us', cat:'', memo:''};
+  F = tx ? {...tx} : {id:uid(), type:'out', date:(S.tab==='cal'&&S.selDay)?S.selDay:ymd(new Date()), amount:0, who:S.lastWho||'us', cat:'', memo:''};
   F.isEdit=!!tx; F.armed=false; drawSheet(); $('#sheet').hidden=false; document.body.style.overflow='hidden';
   
 }
@@ -485,7 +523,7 @@ async function saveTx(){
   if(!F.cat){ err.textContent='카테고리를 골라 주세요.'; return; }
   if(!F.date){ err.textContent='날짜를 골라 주세요.'; return; }
   const tx={id:F.id,type:F.type,date:F.date,amount:F.amount,who:F.who,cat:F.cat,memo:(F.memo||'').trim(),createdAt:F.createdAt||Date.now()};
-  S.lastWho=F.who; const wasEdit=F.isEdit; S.month=F.date.slice(0,7);
+  S.lastWho=F.who; const wasEdit=F.isEdit; S.month=F.date.slice(0,7); if(S.tab==='cal') S.selDay=F.date;
   try{ await store().put(tx); closeSheet(); toast(wasEdit?'수정했어요':'저장했어요'); }
   catch(e){ err.textContent='저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'; }
 }
@@ -571,6 +609,7 @@ document.addEventListener('click', async e=>{
     case 'close': closeSheet(); break;
     case 'save': saveTx(); break;
     case 'del': if(!F.armed){ F.armed=true; drawSheet(); } else { try{ await store().remove(F.id); closeSheet(); toast('삭제했어요'); }catch(e){ $('#f-err').textContent='삭제하지 못했어요. 다시 시도해 주세요.'; } } break;
+    case undefined: if(d.day){ S.selDay=d.day; render(); } break;
     case 'prev': S.month=shiftMonth(S.month,-1); render(); break;
     case 'next': S.month=shiftMonth(S.month,1); render(); break;
     case 'clear-ex': await store().removeMany(S.txs.filter(t=>t.ex).map(t=>t.id)); toast('예시를 지웠어요'); break;
