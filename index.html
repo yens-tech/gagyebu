@@ -179,8 +179,10 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .scan-msg.ok{color:var(--accent)} .scan-msg.bad{color:var(--over)}
 .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--accent);border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
-.scan2{display:flex;gap:8px}
-.scan2 .scan{flex:1;padding:12px;gap:10px}
+.scan2{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.scan2 .scan{flex-direction:column;align-items:center;text-align:center;padding:12px 6px;gap:6px;margin:6px 0 4px}
+.scan2 .scan b{font-size:14px}
+.scan2 .scan span span{font-size:11.5px}
 .cap-h{font-size:18px;font-weight:700;text-align:center}
 .cap-info{display:grid;justify-items:center;gap:10px;padding:48px 0;color:var(--muted);text-align:center}
 .cap-sum{padding:10px 4px;font-size:14px;color:var(--muted)}
@@ -257,7 +259,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-10';
+const APP_VERSION='2026.11.05-11';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -635,8 +637,9 @@ function drawSheet(){
       <button class="iconbtn" data-act="close" aria-label="닫기">${svg('close')}</button></div>
     ${F.type==='out'&&!F.isEdit?`<div class="scan2">
       <button class="scan" data-act="scan" ${F.scan==='reading'?'disabled':''}>${F.scan==='reading'?'<span class="spin"></span>':svg('camera')}
-        <span><b>${F.scan==='reading'?'읽는 중…':'영수증 사진'}</b><span>${F.scan==='reading'?'10초 정도 걸려요':'한 건 자동 입력'}</span></span></button>
-      <button class="scan" data-act="caps">${svg('list')}<span><b>결제내역 캡처</b><span>여러 건 한 번에</span></span></button></div>
+        <span><b>${F.scan==='reading'?'읽는 중…':'영수증'}</b><span>${F.scan==='reading'?'10초 정도':'사진 한 장'}</span></span></button>
+      <button class="scan" data-act="caps">${svg('list')}<span><b>내역 캡처</b><span>여러 건 한 번에</span></span></button>
+      <button class="scan" data-act="paste">${svg('memo')}<span><b>붙여넣기</b><span>복사한 글자로</span></span></button></div>
       <input type="file" id="f-photo" accept="image/*" hidden><input type="file" id="f-caps" accept="image/*" multiple hidden>`:''}
     ${F.scanMsg?`<div class="scan-msg ${F.scanOk?'ok':'bad'}">${esc(F.scanMsg)}</div>`:''}
     <div class="row">${svg('cal')}<input type="date" id="f-date" value="${F.date}" aria-label="날짜"></div>
@@ -796,16 +799,65 @@ const norm = s => String(s||'').replace(/\(주\)|주식회사|㈜|\s|[·.,\-_()]
 const sameText = (a,b) => { a=norm(a); b=norm(b); if(!a||!b) return true; return a.includes(b)||b.includes(a)||a.slice(0,4)===b.slice(0,4); };
 function catFromHistory(merchant,type){ const n=norm(merchant); if(!n) return ''; const t=S.txs.find(x=>x.type===type&&!x.ex&&x.memo&&sameText(x.memo,merchant)&&norm(x.memo).slice(0,4)===n.slice(0,4)); return t?t.cat:''; }
 
+/* ---------------- 텍스트 붙여넣기 (폰의 글자 복사 기능) ---------------- */
+const KW=[[/카드대금|카드결제대금|결제대금/,'card_bill'],
+  [/GS25|지에스25|씨유|\bCU\b|세븐일레븐|이마트24|미니스톱|emart24/i,'conv'],[/배달의민족|배민|쿠팡이츠|요기요|땡겨요/,'delivery'],
+  [/스타벅스|커피|카페|투썸|메가엠지씨|메가커피|빽다방|이디야|컴포즈|폴바셋|할리스|파스쿠찌|파리바게|뚜레쥬르|베이커리|던킨|배스킨/,'cafe'],
+  [/이마트|홈플러스|롯데마트|코스트코|트레이더스|다이소|쿠팡|컬리|노브랜드|하나로마트|농협|오아시스/,'mart'],
+  [/택시|카카오T|티머니|코레일|KTX|SRT|지하철|버스|후불교통|교통/,'transport'],[/주유|에너지|칼텍스|S-OIL|에쓰오일|오일뱅크|주차|하이패스/,'car'],
+  [/병원|의원|약국|치과|한의원|안과|피부과|정형외과/,'health'],[/넷플릭스|NETFLIX|유튜브|YOUTUBE|스포티파이|디즈니|티빙|웨이브|멜론|쿠팡와우|APPLE\.COM|구글플레이/i,'subs'],
+  [/SKT|SK텔레콤|LG유플러스|U\+|알뜰폰|\bKT\b/,'telecom'],[/관리비|한국전력|한전|도시가스|수도/,'utility'],[/CGV|메가박스|롯데시네마|교보|예스24|알라딘|영풍/,'culture'],
+  [/올리브영|미용실|헤어|네일/,'beauty'],[/무신사|지그재그|에이블리|29CM|유니클로|자라|ZARA|탑텐|스파오/i,'fashion'],
+  [/호텔|항공|여기어때|야놀자|아고다|에어비앤비|트립닷컴/i,'travel'],[/보험|생명|화재|손해/,'insurance'],
+  [/호프|포차|주점|이자카야|와인|맥주/,'alcohol'],
+  [/식당|국밥|김밥|맥도날드|버거킹|롯데리아|맘스터치|서브웨이|분식|치킨|피자|족발|고기|식육|횟집|초밥|스시|라멘|국수|반점|짬뽕|한식|중식|일식|푸드|키친/,'food']];
+function kwCat(t,type){ if(type==='in'){ if(/급여|월급|상여|SALARY/i.test(t)) return 'salary'; if(/이자|배당/.test(t)) return 'interest'; if(/환급|환불/.test(t)) return 'refund'; return 'etc_in'; }
+  for(const [re,c] of KW) if(re.test(t)) return c; return 'etc'; }
+function parseText(raw){
+  const now=new Date(), Y=now.getFullYear(), M=now.getMonth()+1;
+  const mk=(y,m,d)=>{ if(!y) y = m>M ? Y-1 : Y; if(y<100) y+=2000; return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; };
+  const dateOf=l=>{ let m;
+    if((m=l.match(/(20\d{2}|\d{2})[.\-/년]\s*(\d{1,2})[.\-/월]\s*(\d{1,2})/))) return mk(+m[1],+m[2],+m[3]);
+    if((m=l.match(/(\d{1,2})월\s*(\d{1,2})일/))) return mk(0,+m[1],+m[2]);
+    if((m=l.match(/(?:^|\s|\[KB\])(\d{1,2})[./](\d{1,2})(?![\d,])/)) && +m[1]<=12 && +m[2]<=31) return mk(0,+m[1],+m[2]);
+    if(/^오늘\b/.test(l)) return ymd(now);
+    if(/^어제\b/.test(l)){ const d=new Date(now); d.setDate(d.getDate()-1); return ymd(d); }
+    return ''; };
+  const META=/잔액|누적|한도|포인트|적립|할인|일시불|할부|개월|승인|체크카드|신용카드|국민카드|KB국민|KB\s?Pay|Web발신|^\[|이용내역|거래내역|전체|조회|^\d{1,2}:\d{2}|^[\d*\-]{6,}$|\*/;
+  const amtOf=l=>{ if(/잔액|누적|한도|포인트|적립/.test(l)) return null; const m=l.match(/^([+\-−]?)\s*([\d]{1,3}(?:,\d{3})+|\d+)\s*원?$/)||l.match(/([+\-−]?)\s*([\d]{1,3}(?:,\d{3})+|\d{3,})\s*원/); if(!m) return null;
+    const v=+m[2].replace(/,/g,''); return v>0&&v<100000000 ? {v, sign:m[1]} : null; };
+  const lines=String(raw||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  let cur=ymd(now), seen=false; const out=[];
+  const recs=[];  // [{i, amt, sign, date}]
+  lines.forEach((l,i)=>{ const d=dateOf(l); if(d){ cur=d; seen=true; } const a=amtOf(l); if(a && !(d && !/원/.test(l))) recs.push({i, amt:a.v, sign:a.sign, date:cur, seen}); });
+  recs.forEach((r,k)=>{
+    const from=k?recs[k-1].i+1:0, to=k<recs.length-1?recs[k+1].i:lines.length;
+    const isText=l=>!META.test(l) && !dateOf(l) && !amtOf(l) && /[가-힣A-Za-z]/.test(l) && !/^(입금|출금|지출|수입|결제|취소)$/.test(l) && l.length<=40;
+    let merchant=''; for(let j=r.i-1;j>=from;j--){ if(isText(lines[j])){ merchant=lines[j]; break; } }
+    if(!merchant) for(let j=r.i+1;j<to;j++){ if(isText(lines[j])){ merchant=lines[j]; break; } }
+    const ctx=lines.slice(from, Math.min(to,r.i+2)).join(' ');
+    let date=r.date; if(!r.seen){ for(let j=r.i+1;j<to;j++){ const d=dateOf(lines[j]); if(d){ date=d; break; } } }   // 문자처럼 날짜가 금액 뒤에 오는 경우
+    const cancel=/취소/.test(ctx);
+    const isIn = cancel || r.sign==='+' || r.sign==='-' || r.sign==='−' || (/입금|환불|받음|급여/.test(ctx) && !/출금|결제|승인/.test(ctx));
+    let kind = (cancel||r.sign==='-'||r.sign==='−')?'cancel': (/카드대금|결제대금/.test(merchant+ctx) || (/카드/.test(ctx)&&/출금/.test(ctx)&&!/승인/.test(ctx)))?'card_bill':'pay';
+    if(kind==='card_bill'&&!merchant) merchant='카드대금';
+    const nm=[S.settings.names.a,S.settings.names.b].filter(Boolean);
+    if(kind==='pay' && /이체|송금/.test(ctx) || nm.some(n=>merchant.includes(n))) kind='transfer';
+    let cat=kwCat(merchant, isIn?'in':'out'); if(isIn && cat==='etc_in' && /\(주\)|주식회사|㈜/.test(merchant) && r.amt>=500000) cat='salary';
+    out.push({date, merchant: merchant.replace(/\s*(결제|사용|승인)$/,''), amount:r.amt, type:isIn?'in':'out', kind, category:cat});
+  });
+  return out;
+}
+function openPaste(who){ R={status:'paste', mode:'paste', who:who||S.lastWho||'us', items:[], removed:0, err:'', text:''}; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture(); setTimeout(()=>$('#cap-text')?.focus(),50); }
+function readPasted(){
+  R.text=$('#cap-text').value; const raw=parseText(R.text);
+  R.items=[]; R.removed=0; R.err=''; buildReview(raw); R.status='review';
+  if(!R.items.length && !R.removed){ R.status='paste'; R.err='금액이 있는 내역을 찾지 못했어요. 결제내역 화면의 글자를 그대로 붙여넣어 주세요.'; }
+  drawCapture();
+}
+
 let R=null;
-async function startCapture(files, who){
-  R={status:'reading', done:0, total:files.length, who:who||S.lastWho||'us', items:[], removed:0, err:'', files, note:''};
-  $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture();
-  const raw=[]; const errs=[];
-  for(const f of files){
-    try{ const res=await readImage(await shrink(f), capturePrompt(), t=>{ if(R){ R.note=t; drawCapture(); } }); if(R) R.note=''; (res&&Array.isArray(res.items)?res.items:[]).forEach(x=>raw.push(x)); }
-    catch(e){ errs.push(e&&e.code||'api'); R.detail=e&&e.detail||String(e&&e.message||''); }
-    if(!R) return; R.done++; drawCapture();
-  }
+function buildReview(raw){
   const today=ymd(new Date()), seen=new Set(), outKeys=catsOf('out').map(c=>c[0]), inKeys=catsOf('in').map(c=>c[0]);
   for(const x of raw){
     const amount=Math.round(Math.abs(+String(x.amount).replace(/[^\d.-]/g,'')));
@@ -829,6 +881,17 @@ async function startCapture(files, who){
     R.items.push(it);
   }
   R.items.sort((a,b)=>b.date.localeCompare(a.date));
+}
+async function startCapture(files, who){
+  R={status:'reading', done:0, total:files.length, who:who||S.lastWho||'us', items:[], removed:0, err:'', files, note:''};
+  $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawCapture();
+  const raw=[]; const errs=[];
+  for(const f of files){
+    try{ const res=await readImage(await shrink(f), capturePrompt(), t=>{ if(R){ R.note=t; drawCapture(); } }); if(R) R.note=''; (res&&Array.isArray(res.items)?res.items:[]).forEach(x=>raw.push(x)); }
+    catch(e){ errs.push(e&&e.code||'api'); R.detail=e&&e.detail||String(e&&e.message||''); }
+    if(!R) return; R.done++; drawCapture();
+  }
+  buildReview(raw);
   R.status='review';
   if(!R.items.length) R.err = errs.length===files.length ? (READ_MSGS[errs[0]]||READ_MSGS.api)+(R.detail?` (${R.detail})`:'') : R.removed ? '' : '캡처에서 거래 내역을 찾지 못했어요. 금액과 가게 이름이 보이게 다시 캡처해 주세요.';
   else if(errs.length) R.err=`${errs.length}장은 읽지 못했어요. ${READ_MSGS[errs[0]]||''}`;
@@ -838,7 +901,13 @@ function drawCapture(){
   if(!R) return;
   const names=S.settings.names, n=R.items.filter(i=>i.on).length;
   let body='';
-  if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small">${esc(R.note||'한 장에 10초 정도 걸려요')}</span></div>`;
+  if(R.status==='paste') body=`<div class="small" style="padding:6px 4px 10px;line-height:1.6">
+      <b style="color:var(--fg)">아이폰</b>: 캡처 사진을 열고 오른쪽 아래 <b style="color:var(--fg)">텍스트 인식 버튼</b>(네모 안 글자 모양)을 누른 뒤 <b style="color:var(--fg)">모두 선택 → 복사</b><br>
+      <b style="color:var(--fg)">갤럭시</b>: 캡처 사진을 열고 <b style="color:var(--fg)">T 버튼(텍스트 추출)</b> → <b style="color:var(--fg)">모두 선택 → 복사</b><br>
+      카드·은행 문자를 복사해서 붙여넣어도 돼요.</div>
+      <textarea id="cap-text" class="inp" rows="12" placeholder="여기에 길게 눌러 붙여넣기" style="font-size:15px;line-height:1.5;resize:vertical">${esc(R.text||'')}</textarea>
+      ${R.err?`<div class="scan-msg bad">${esc(R.err)}</div>`:''}`;
+  else if(R.status==='reading') body=`<div class="cap-info"><span class="spin"></span><b style="color:var(--fg)">캡처 읽는 중 (${R.done}/${R.total})</b><span class="small">${esc(R.note||'한 장에 10초 정도 걸려요')}</span></div>`;
   else {
     body=`<div class="cap-sum"><b>${R.items.length}건</b>을 찾았어요${R.removed?` · 중복 <b>${R.removed}건</b>은 뺐어요`:''}</div>`;
     if(R.err) body+=`<div class="scan-msg bad" style="padding:0 4px 8px">${esc(R.err)}</div>`;
@@ -866,7 +935,8 @@ function drawCapture(){
     }
   }
   $('#sheet').innerHTML=`<div class="sheet-in">
-    <div class="sheet-top"><span></span><div class="cap-h">결제내역 캡처</div><button class="iconbtn" data-act="cap-close" aria-label="닫기">${svg('close')}</button></div>${body}</div>
+    <div class="sheet-top"><span></span><div class="cap-h">${R.mode==='paste'?'텍스트 붙여넣기':'결제내역 캡처'}</div><button class="iconbtn" data-act="cap-close" aria-label="닫기">${svg('close')}</button></div>${body}</div>
+    ${R.status==='paste'?`<div class="save-bar"><div class="save-bar-in"><button class="btn primary" data-act="cap-read">내역 읽기</button></div></div>`:''}
     ${R.status==='review'?`<div class="save-bar"><div class="save-bar-in">${R.items.length?`<button class="btn primary" data-act="cap-save" ${n?'':'disabled'}>${n?`확인 완료 · ${n}건 등록 (${sumTxt()})`:'등록할 내역을 체크해 주세요'}</button>`:(R.err&&R.files?`<button class="btn" data-act="cap-close" style="flex:0 0 auto">닫기</button><button class="btn primary" data-act="cap-retry">다시 시도</button>`:`<button class="btn" data-act="cap-close">닫기</button>`)}</div></div>`:''}`;
   document.querySelectorAll('[data-cf]').forEach(el=>el.onchange=e=>{ const it=R.items[+el.dataset.i], f=el.dataset.cf;
     if(f==='amount'){ const v=+el.value.replace(/\D/g,''); it.amount=v; el.value=v?won(v):''; drawSaveBar(); }
@@ -917,6 +987,8 @@ document.addEventListener('click', async e=>{
     case 'caps': $('#f-caps')?.click(); break;
     case 'cap-close': closeCapture(); break;
     case 'cap-save': saveCapture(); break;
+    case 'cap-read': readPasted(); break;
+    case 'paste': { const who=F.who; closeSheet(); openPaste(who); } break;
     case 'cap-retry': { const fs=R.files, w=R.who; startCapture(fs,w); } break;
     case 'close': closeSheet(); break;
     case 'save': saveTx(); break;
