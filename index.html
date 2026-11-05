@@ -314,7 +314,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-36';
+const APP_VERSION='2026.11.05-37';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -682,7 +682,7 @@ function evRow(e, date){ const dt=new Date((date||e.date)+'T00:00');
     <span class="item-t"><b>${esc(e.title)}</b><span>${date?`${dt.getMonth()+1}/${dt.getDate()} (${DOW[dt.getDay()]}) · `:''}${e.time?esc(e.time)+' · ':'시간 미정 · '}<span class="who">${esc(whoName(e.who||'us'))}</span>${e.yearly?'🔁 매년':''}${e.memo?' · '+esc(e.memo):''}</span></span>
     ${date?`<span class="amt small" style="color:var(--accent);font-weight:600">${dLabel(date)}</span>`:''}</button>`; }
 let EV=null;
-function openEvent(e, date){ EV=e?{...e, isEdit:true}:{id:uid(), date:date||ymd(new Date()), time:'', title:'', who:'us', yearly:false, memo:'', remind:true}; EV.noTime=!EV.time; EV.armed=false; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawEvent(); setTimeout(()=>{ if(!EV.isEdit) $('#ev-title')?.focus(); },50); }
+function openEvent(e, date){ EV=e?{...e, isEdit:true}:{id:uid(), date:date||ymd(new Date()), time:'', title:'', who:'us', yearly:false, memo:'', remind:true}; EV.noTime=!!(e && !e.time); EV.armed=false; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawEvent(); setTimeout(()=>{ if(!EV.isEdit) $('#ev-title')?.focus(); },50); }
 function drawEvent(){ const names=S.settings.names;
   $('#sheet').innerHTML=`<div class="sheet-in"><div class="sheet-top"><span></span><div class="cap-h">${EV.isEdit?'일정 고치기':'일정 추가'}</div><button class="iconbtn" data-act="ev-close" aria-label="닫기">${svg('close')}</button></div>
     <div class="card" style="margin-top:6px">
