@@ -115,7 +115,10 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .crow-t span{color:var(--muted);font-size:12.5px}
 .delta{font-size:12px;text-align:right;color:var(--muted)}
 .split{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.split div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:2px;min-width:0}
+.split div,.split button{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:2px;min-width:0;text-align:left}
+.split button.on{border-color:var(--accent);background:var(--accent-soft)}
+button.crow{width:100%;text-align:left;border-radius:10px}
+button.crow.on{background:var(--accent-soft);margin-inline:-8px;padding-inline:8px;width:calc(100% + 16px)}
 
 /* settings */
 .field{display:grid;gap:6px;padding:14px 0}
@@ -317,7 +320,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.10-39';
+const APP_VERSION='2026.11.10-40';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -721,20 +724,32 @@ function listView(){
 }
 
 function statsView(){
-  const cur=monthTx(S.month).filter(t=>t.type==='out'), prev=monthTx(shiftMonth(S.month,-1)).filter(t=>t.type==='out');
+  const all=monthTx(S.month).filter(t=>t.type==='out'), prevAll=monthTx(shiftMonth(S.month,-1)).filter(t=>t.type==='out');
   const sum=(arr,f)=>arr.reduce((m,t)=>(m[f(t)]=(m[f(t)]||0)+t.amount,m),{});
-  const byCat=sum(cur,t=>t.cat), prevCat=sum(prev,t=>t.cat), total=cur.reduce((s,t)=>s+t.amount,0);
+  const W=S.statWho||'', C=S.statCat||'';
+  const cur=W?all.filter(t=>t.who===W):all, prev=W?prevAll.filter(t=>t.who===W):prevAll;
+  const byCat=sum(cur,t=>t.cat), prevCat=sum(prev,t=>t.cat), total=cur.reduce((s,t)=>s+t.amount,0), allTotal=all.reduce((s,t)=>s+t.amount,0);
   const rows=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-  const byWho=sum(cur,t=>t.who);
+  const byWho=sum(all,t=>t.who);
   let html=summaryCard();
-  html+=`<h2 class="sec-h">누가 썼나</h2><div class="split">${['a','b','us'].map(w=>`<div><span class="sum-label">${esc(whoName(w))}</span><b class="num">${won(byWho[w]||0)}</b><span class="small num">${total?Math.round((byWho[w]||0)/total*100):0}%</span></div>`).join('')}</div>`;
-  html+=`<h2 class="sec-h">카테고리별 지출</h2>`;
+  html+=`<h2 class="sec-h">누가 썼나 <span class="small" style="font-weight:400">눌러서 내역 보기</span></h2><div class="split">${['a','b','us'].map(w=>`<button class="${W===w?'on':''}" data-statwho="${w}"><span class="sum-label">${esc(whoName(w))}</span><b class="num">${won(byWho[w]||0)}</b><span class="small num">${allTotal?Math.round((byWho[w]||0)/allTotal*100):0}%</span></button>`).join('')}</div>`;
+  html+=`<h2 class="sec-h">${W?esc(whoName(W))+' · ':''}카테고리별 지출 <span class="small" style="font-weight:400">눌러서 내역 보기</span></h2>`;
   if(!rows.length) return html+`<div class="empty"><div>이 달 지출이 없어요.</div></div>`;
   html+='<div class="card">'+rows.map(([k,v])=>{ const c=catInfo(k), p=prevCat[k]||0, d=v-p;
     const dtxt = p? (d>0?`지난달보다 +${won(d)}`:d<0?`지난달보다 −${won(-d)}`:'지난달과 같음') : '지난달 없음';
-    return `<div class="crow"><span class="ic">${svg(c.icon)}</span>
+    return `<button class="crow ${C===k?'on':''}" data-statcat="${k}"><span class="ic">${svg(c.icon)}</span>
       <div style="min-width:0"><div class="crow-t"><b style="font-weight:500">${esc(c.label)}</b><span class="num">${Math.round(v/total*100)}%</span></div><div class="bar"><i style="width:${v/rows[0][1]*100}%"></i></div></div>
-      <div><div class="num" style="font-weight:600;text-align:right">${won(v)}</div><div class="delta num ${d>0&&p?'neg':''}">${dtxt}</div></div></div>`; }).join('')+'</div>';
+      <div><div class="num" style="font-weight:600;text-align:right">${won(v)}</div><div class="delta num ${d>0&&p?'neg':''}">${dtxt}</div></div></button>`; }).join('')+'</div>';
+  if(W||C){
+    const list=cur.filter(t=>!C||t.cat===C).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+    const title=[W?whoName(W):'', C?catInfo(C).label:''].filter(Boolean).join(' · ');
+    html+=`<div id="stat-list"><h2 class="sec-h" style="display:flex;justify-content:space-between;align-items:center"><span>${esc(title)} 내역 <span class="small num" style="font-weight:400">${list.length}건 · ${won(list.reduce((a,t)=>a+t.amount,0))}원</span></span><button class="linkbtn" data-act="stat-clear">닫기</button></h2>`;
+    if(!list.length) html+=`<div class="small" style="padding:0 4px">내역이 없어요.</div>`;
+    else { const byDay={}; list.forEach(t=>(byDay[t.date]=byDay[t.date]||[]).push(t));
+      for(const d of Object.keys(byDay)){ const dt=new Date(d+'T00:00'), ds=byDay[d].reduce((a,t)=>a+t.amount,0);
+        html+=`<div class="day" style="margin-top:10px"><div class="day-h"><span>${dt.getMonth()+1}월 ${dt.getDate()}일 ${DOW[dt.getDay()]}요일</span><span class="num">−${won(ds)}원</span></div><div class="items">${byDay[d].map(itemRow).join('')}</div></div>`; } }
+    html+='</div>';
+  }
   return html;
 }
 
@@ -1320,6 +1335,8 @@ document.addEventListener('click', async e=>{
   if(d.mesave){ const [key,k]=d.mesave.split('|'); saveMealSlot(key,k); return; }
   if(d.evedit){ const e=S.events.find(x=>x.id===d.evedit); if(e) openEvent(e); return; }
   if(EV && d.evwho){ readEvForm(); EV.who=d.evwho; drawEvent(); return; }
+  if(d.statwho){ S.statWho = S.statWho===d.statwho ? '' : d.statwho; render(); if(S.statWho) setTimeout(()=>$('#stat-list')?.scrollIntoView({behavior:'smooth',block:'start'}),30); return; }
+  if(d.statcat){ S.statCat = S.statCat===d.statcat ? '' : d.statcat; render(); if(S.statCat) setTimeout(()=>$('#stat-list')?.scrollIntoView({behavior:'smooth',block:'start'}),30); return; }
   if(d.edit){ const t=S.txs.find(x=>x.id===d.edit); if(t) openSheet(t); return; }
   if(F && !$('#sheet').hidden){
     if(d.type){ if(F.type!==d.type){ F.type=d.type; F.cat=''; } drawSheet(); return; }
@@ -1334,6 +1351,7 @@ document.addEventListener('click', async e=>{
     case 'add': openSheet(); break;
     case 'scan': $('#f-photo')?.click(); break;
     case 'note-add': addNote(); break;
+    case 'stat-clear': S.statWho=''; S.statCat=''; render(); break;
     case 'ev-add': openEvent(null, S.selDay); break;
     case 'ev-add-home': openEvent(null); break;
     case 'ev-close': closeEvent(); break;
