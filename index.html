@@ -339,7 +339,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.10-44';
+const APP_VERSION='2026.11.10-45';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -491,7 +491,7 @@ const FireStore = {
       .catch(()=>{}).finally(()=>{ this.loading[mo]=false; });
   },
   async loadAll(){ if(this.allLoaded||!this.db||!S.user) return; this.allLoaded=true;
-    try{ const snap=await this.home().collection('tx').where('date','<',this.liveStart).get(); const by={}; snap.docs.forEach(d=>{ const t=d.data(); const m=String(t.date).slice(0,7); (by[m]=by[m]||[]).push(t); }); Object.assign(this.old, by); this.merge(); }
+    try{ const snap=await this.home().collection('tx').where('date','>=',searchFrom()).where('date','<',this.liveStart).get(); const by={}; snap.docs.forEach(d=>{ const t=d.data(); const m=String(t.date).slice(0,7); (by[m]=by[m]||[]).push(t); }); Object.assign(this.old, by); this.merge(); }
     catch(e){ this.allLoaded=false; throw e; } },
   dropOld(date){ const mo=String(date||'').slice(0,7); if(this.old[mo]){ delete this.old[mo]; this.ensureMonth(mo); } },
   async put(tx){ tx.by=S.user?.email||''; await this.home().collection('tx').doc(tx.id).set(tx); this.dropOld(tx.date); },
@@ -756,6 +756,7 @@ function readEvForm(){ EV.title=$('#ev-title').value.trim(); EV.date=$('#ev-date
 function closeEvent(){ EV=null; $('#sheet').hidden=true; document.body.style.overflow=''; render(); }
 
 /* ---------------- 검색 ---------------- */
+function searchFrom(){ return shiftMonth(ym(new Date()), -5)+'-01'; }   // 이번 달 포함 최근 6개월
 function bindSearch(){
   const q=$('#q'); if(!q) return; q.value=S.search||''; 
   if(!S.searchFocused){ S.searchFocused=true; setTimeout(()=>q.focus(),30); }
@@ -767,17 +768,19 @@ function bindSearch(){
 function drawSearch(){
   const box=$('#sr'); if(!box) return;
   const raw=(S.search||'').trim(), q=raw.toLowerCase().replace(/\s+/g,''), num=raw.replace(/[^\d]/g,'');
-  const note=S.searchLoading?'<div class="small" style="padding:6px 4px">예전 내역까지 불러오는 중…</div>':S.searchErr?'<div class="small" style="padding:6px 4px;color:var(--over)">예전 내역을 불러오지 못했어요. 최근 3개월만 검색돼요.</div>':'';
+  const note=S.searchLoading?'<div class="small" style="padding:6px 4px">최근 6개월 내역을 불러오는 중…</div>':S.searchErr?'<div class="small" style="padding:6px 4px;color:var(--over)">예전 내역을 불러오지 못했어요. 최근 3개월만 검색돼요.</div>':'';
   if(!q){ const recent=[...new Set(S.txs.filter(t=>!t.ex&&t.memo).sort((a,b)=>b.date.localeCompare(a.date)).map(t=>t.memo.split(/[\s·/(]/)[0]).filter(w=>w.length>=2))].slice(0,10);
-    box.innerHTML=note+`<div class="empty" style="margin-top:24px">${svg('search')}<div>가게 이름, 품목, 카테고리, 금액으로 찾아보세요.</div><div class="small">예: 쿠팡, 크림치즈, 외식, 42750</div></div>`+
+    box.innerHTML=note+`<div class="empty" style="margin-top:24px">${svg('search')}<div>최근 6개월 내역을 가게 이름, 품목, 카테고리, 금액으로 찾아보세요.</div><div class="small">예: 쿠팡, 크림치즈, 외식, 42750</div></div>`+
       (recent.length?`<div class="sugg" style="justify-content:center;padding-top:14px">${recent.map(w=>`<button data-q="${esc(w)}">${esc(w)}</button>`).join('')}</div>`:'');
     return; }
-  const hit=S.txs.filter(t=>{ if(t.ex) return false;
+  const from=searchFrom();
+  const hit=S.txs.filter(t=>{ if(t.ex||t.date<from) return false;
     const hay=[t.memo, catInfo(t.cat).label, whoName(t.who)].join(' ').toLowerCase().replace(/\s+/g,'');
     return hay.includes(q) || (num.length>=3 && String(t.amount).includes(num)); })
     .sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
   const out=hit.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0), inc=hit.filter(t=>t.type==='in').reduce((a,t)=>a+t.amount,0);
-  let html=note+`<div class="sres"><b>${hit.length}건</b>${out?` · 지출 <b class="num">${won(out)}원</b>`:''}${inc?` · 입금 <b class="num pos">${won(inc)}원</b>`:''}</div>`;
+  const fd=new Date(from+'T00:00');
+  let html=note+`<div class="sres"><span class="small">${fd.getFullYear()}년 ${fd.getMonth()+1}월부터 검색</span><br><b>${hit.length}건</b>${out?` · 지출 <b class="num">${won(out)}원</b>`:''}${inc?` · 입금 <b class="num pos">${won(inc)}원</b>`:''}</div>`;
   if(!hit.length){ box.innerHTML=html+`<div class="empty" style="margin-top:20px"><div>'${esc(raw)}'에 맞는 내역이 없어요.</div></div>`; return; }
   const byMonth={}; hit.slice(0,300).forEach(t=>(byMonth[t.date.slice(0,7)]=byMonth[t.date.slice(0,7)]||[]).push(t));
   for(const m of Object.keys(byMonth)){ const list=byMonth[m], ms=list.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0);
