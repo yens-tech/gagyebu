@@ -49,7 +49,7 @@ button{cursor:pointer;background:none;border:0;padding:0}
 svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none}
 
 /* header */
-.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding-block:14px 10px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding-block:14px 10px;margin-inline:calc(-1 * max(16px, env(safe-area-inset-left,0px)));padding-inline:max(16px, env(safe-area-inset-left,0px))}
 .month{display:flex;align-items:center;gap:6px}
 .month h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em;min-width:118px;text-align:center}
 .iconbtn{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;color:var(--muted)}
@@ -162,7 +162,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .row{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid var(--line)}
 .row .i{color:var(--muted)}
 .row input{flex:1;min-width:0;border:0;background:none;font-size:17px;padding:4px 0}
-.row textarea.grow{flex:1;min-width:0;border:0;background:none;font:inherit;font-size:17px;line-height:1.45;padding:2px 0;resize:none;overflow:hidden;color:var(--fg);word-break:break-all}
+.row textarea.grow{min-height:1.6em;flex:1;min-width:0;border:0;background:none;font:inherit;font-size:17px;line-height:1.45;padding:2px 0;resize:none;overflow:hidden;color:var(--fg);word-break:break-all}
 .row textarea.grow:focus{outline:none}
 .row>svg.i{flex:none;margin-top:2px}
 .row input:focus{outline:none}
@@ -329,7 +329,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.10-41';
+const APP_VERSION='2026.11.10-42';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -821,7 +821,7 @@ function bindLogin(){
 let F=null; // 편집 중인 폼
 function openSheet(tx){
   F = tx ? {...tx} : {id:uid(), type:'out', date:(S.tab==='book'&&S.bookMode==='cal'&&S.selDay)?S.selDay:ymd(new Date()), amount:0, who:S.lastWho||'us', cat:'', memo:''};
-  F.isEdit=!!tx; F.armed=false; drawSheet(); $('#sheet').hidden=false; document.body.style.overflow='hidden';
+  F.isEdit=!!tx; F.armed=false; drawSheet(); $('#sheet').hidden=false; document.body.style.overflow='hidden'; requestAnimationFrame(()=>autoGrow($('#f-memo')));
   
 }
 function closeSheet(){ $('#sheet').hidden=true; document.body.style.overflow=''; F=null; }
@@ -891,7 +891,7 @@ function setSplitFrom(parts){   // [{cat, amount}] → F.split (마지막은 자
   F.split=parts.map(p=>({cat:p.cat, amount:p.amount}));
 }
 
-function autoGrow(el){ if(!el) return; el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
+function autoGrow(el){ if(!el) return; el.style.height='auto'; const h=el.scrollHeight; if(h>0) el.style.height=h+'px'; else el.style.height=''; }
 function drawSugg(){
   const box=$('#sugg'); if(!box) return;
   box.innerHTML=memoSuggestions().map(m=>`<button data-sugg="${esc(m)}">${esc(m)}</button>`).join('');
