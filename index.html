@@ -85,7 +85,7 @@ svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .ic{width:42px;height:42px;border-radius:50%;background:var(--chip);display:grid;place-items:center;flex:none;color:var(--fg)}
 .ic.in{background:var(--accent-soft);color:var(--accent)}
 .item-t{flex:1;min-width:0}
-.item-t b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-t b{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-weight:500;overflow:hidden;word-break:break-all;line-height:1.4}
 .item-t span{font-size:12.5px;color:var(--muted)}
 .amt{font-weight:600;white-space:nowrap}
 .who{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--chip);color:var(--muted);margin-right:4px}
@@ -159,6 +159,9 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .row{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid var(--line)}
 .row .i{color:var(--muted)}
 .row input{flex:1;min-width:0;border:0;background:none;font-size:17px;padding:4px 0}
+.row textarea.grow{flex:1;min-width:0;border:0;background:none;font:inherit;font-size:17px;line-height:1.45;padding:2px 0;resize:none;overflow:hidden;color:var(--fg);word-break:break-all}
+.row textarea.grow:focus{outline:none}
+.row>svg.i{flex:none;margin-top:2px}
 .row input:focus{outline:none}
 .amount-in{font-size:26px!important;font-weight:700}
 .quick{display:flex;gap:6px;flex-wrap:wrap;padding:10px 4px 0}
@@ -314,7 +317,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.05-38';
+const APP_VERSION='2026.11.10-39';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -822,7 +825,7 @@ function drawSheet(){
     <div class="row">${svg('won')}<input id="f-amt" class="amount-in num" inputmode="numeric" placeholder="0" value="${F.amount?won(F.amount):''}" aria-label="금액"><span style="color:var(--muted)">원</span></div>
     <div class="quick">${[1000,10000,50000,100000].map(v=>`<button data-plus="${v}">+${v>=10000?v/10000+'만':'천'}</button>`).join('')}<button data-plus="0">지우기</button></div>
     <div class="people">${[['a',names.a],['b',names.b],['us','우리']].map(([k,l])=>`<button class="pchip ${F.who===k?'on':''}" data-who="${k}">${esc(l)}</button>`).join('')}</div>
-    <div class="row">${svg('memo')}<input id="f-memo" placeholder="상세 내역을 입력해주세요" value="${esc(F.memo)}" autocomplete="off" aria-label="메모"></div>
+    <div class="row" style="align-items:flex-start">${svg('memo')}<textarea id="f-memo" class="grow" rows="1" placeholder="상세 내역을 입력해주세요" autocomplete="off" aria-label="메모">${esc(F.memo)}</textarea></div>
     <div class="sugg" id="sugg"></div>
     <div class="grid">${cats.map(([k,l])=>`<button class="cat ${F.cat===k?'on':''}" data-cat="${k}"><span class="ic">${svg(IC[k]?k:'tag')}</span>${esc(l)}</button>`).join('')}</div>
     <div class="err" id="f-err"></div>
@@ -834,10 +837,11 @@ function drawSheet(){
   drawSugg();
   $('#f-amt').oninput=e=>{ const n=+e.target.value.replace(/\D/g,'').slice(0,12); F.amount=n; e.target.value=n?won(n):''; };
   $('#f-date').onchange=e=>F.date=e.target.value;
-  $('#f-memo').oninput=e=>{ F.memo=e.target.value; drawSugg(); };
+  const fm=$('#f-memo'); autoGrow(fm); fm.oninput=e=>{ F.memo=e.target.value.replace(/\n/g,' '); autoGrow(fm); drawSugg(); }; fm.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); fm.blur(); } };
   const ph=$('#f-photo'); if(ph) ph.onchange=e=>{ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) scanReceipt(f); };
   const pc=$('#f-caps'); if(pc) pc.onchange=e=>{ const fs=[...(e.target.files||[])]; if(fs.length){ const who=F.who; closeSheet(); startCapture(fs, who); } };
 }
+function autoGrow(el){ if(!el) return; el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
 function drawSugg(){
   const box=$('#sugg'); if(!box) return;
   box.innerHTML=memoSuggestions().map(m=>`<button data-sugg="${esc(m)}">${esc(m)}</button>`).join('');
@@ -1322,7 +1326,7 @@ document.addEventListener('click', async e=>{
     if(d.who){ F.who=d.who; document.querySelectorAll('.pchip').forEach(x=>x.classList.toggle('on',x.dataset.who===d.who)); return; }
     if(d.cat){ F.cat=d.cat; document.querySelectorAll('.cat').forEach(x=>x.classList.toggle('on',x.dataset.cat===d.cat)); $('#f-err').textContent=''; drawSugg(); return; }
     if(d.plus!==undefined){ F.amount= +d.plus ? F.amount + +d.plus : 0; $('#f-amt').value=F.amount?won(F.amount):''; return; }
-    if(d.sugg){ F.memo=d.sugg; $('#f-memo').value=d.sugg;
+    if(d.sugg){ F.memo=d.sugg; $('#f-memo').value=d.sugg; autoGrow($('#f-memo'));
       if(!F.cat){ const prev=S.txs.find(t=>t.memo===d.sugg&&t.type===F.type); if(prev){ F.cat=prev.cat; document.querySelectorAll('.cat').forEach(x=>x.classList.toggle('on',x.dataset.cat===F.cat)); } }
       drawSugg(); return; }
   }
