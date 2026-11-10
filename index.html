@@ -227,6 +227,14 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .sauto.neg{color:var(--over)}
 .srow .iconbtn{width:36px;height:36px}
 .srow-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 4px}
+.sbar{flex:1;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 12px;min-width:0}
+.sbar svg.i{color:var(--muted);width:20px;height:20px}
+.sbar input{flex:1;min-width:0;border:0;background:none;font-size:16px;padding:11px 0;color:var(--fg)}
+.sbar input:focus{outline:none}
+.sbar input::-webkit-search-cancel-button{-webkit-appearance:none}
+.sres{padding:4px 4px 0;font-size:14px;color:var(--muted)}
+.sres b{color:var(--fg)}
+.sdate{font-size:12px;color:var(--muted);width:34px;flex:none;text-align:center;margin-left:-4px}
 .fxbtn{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:14px;margin:2px 0 6px;font-weight:600;color:var(--fg);background:var(--surface)}
 .fxbtn svg.i{color:var(--accent)}
 .fxbtn .small{margin-left:auto;font-weight:400}
@@ -331,7 +339,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.10-43';
+const APP_VERSION='2026.11.10-44';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -375,6 +383,7 @@ const IC = {
   plus:"M12 5v14M5 12h14", back:"M15 5l-7 7 7 7", next:"M9 5l7 7-7 7", close:"M6 6l12 12M18 6L6 18",
   cal:"M4 6h16v14H4zM4 10h16M8 3.5v4M16 3.5v4", won:"M5 7.5c0-2 3.1-3.5 7-3.5s7 1.5 7 3.5-3.1 3.5-7 3.5S5 9.5 5 7.5zM5 7.5v4.5c0 2 3.1 3.5 7 3.5s7-1.5 7-3.5V7.5M5 12v4.5c0 2 3.1 3.5 7 3.5s7-1.5 7-3.5V12",
   memo:"M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4", user:"M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4.5 20.5c.8-3.5 3.8-5.5 7.5-5.5s6.7 2 7.5 5.5",
+  search:"M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
   list:"M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01", chart:"M5 20V10M10 20V4M15 20v-8M20 20v-5",
   gear:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.6 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
   home:"M4 11l8-7 8 7v9h-5v-6H9v6H4z",
@@ -481,6 +490,9 @@ const FireStore = {
       .then(snap=>{ this.old[mo]=snap.docs.map(d=>d.data()); this.merge(); render(); })
       .catch(()=>{}).finally(()=>{ this.loading[mo]=false; });
   },
+  async loadAll(){ if(this.allLoaded||!this.db||!S.user) return; this.allLoaded=true;
+    try{ const snap=await this.home().collection('tx').where('date','<',this.liveStart).get(); const by={}; snap.docs.forEach(d=>{ const t=d.data(); const m=String(t.date).slice(0,7); (by[m]=by[m]||[]).push(t); }); Object.assign(this.old, by); this.merge(); }
+    catch(e){ this.allLoaded=false; throw e; } },
   dropOld(date){ const mo=String(date||'').slice(0,7); if(this.old[mo]){ delete this.old[mo]; this.ensureMonth(mo); } },
   async put(tx){ tx.by=S.user?.email||''; await this.home().collection('tx').doc(tx.id).set(tx); this.dropOld(tx.date); },
   async putMany(txs){ const b=this.db.batch(); txs.forEach(t=>{ t.by=S.user?.email||''; b.set(this.home().collection('tx').doc(t.id), t); }); await b.commit(); txs.forEach(t=>this.dropOld(t.date)); },
@@ -515,6 +527,11 @@ function totals(m){ let out=0,inc=0; monthTx(m).forEach(t=>t.type==='in'?inc+=t.
 
 /* ---------------- 화면 그리기 ---------------- */
 function render(){
+  const ae=document.activeElement, keep=ae&&ae.id==='q'?{s:ae.selectionStart,e:ae.selectionEnd}:null;
+  renderInner();
+  if(keep){ const q=$('#q'); if(q){ q.focus(); try{ q.setSelectionRange(keep.s,keep.e); }catch(e){} } }
+}
+function renderInner(){
   const app=$('#app');
   if(S.source==='firebase' && !S.ready){ app.innerHTML='<div class="empty" style="margin-top:40vh">불러오는 중…</div>'; $('#tabs').hidden=true; return; }
   if(S.source==='firebase' && !S.user && !S.fbError){ app.innerHTML=loginView(); $('#tabs').hidden=true; bindLogin(); return; }
@@ -527,10 +544,12 @@ function render(){
   const head = S.tab==='home' ? ''
     : S.tab==='settings' ? `<header class="top"><div class="month"><h1 style="text-align:left;min-width:0">설정</h1></div></header>`
     : S.tab==='meal' ? `<header class="top"><div class="month"><button class="iconbtn" data-act="wk-prev" aria-label="지난주">${svg('back')}</button><h1 style="min-width:150px">${esc(weekLabel())}</h1><button class="iconbtn" data-act="wk-next" aria-label="다음주">${svg('next')}</button></div><div class="top-actions"><button class="iconbtn" data-act="wk-copy" aria-label="지난주 식단 복사">${svg('refresh')}</button></div></header>`
-    : `<header class="top">${monthNav}${S.tab==='book'?`<div class="top-actions"><button class="iconbtn" data-act="bookmode" aria-label="${S.bookMode==='cal'?'목록으로 보기':'달력으로 보기'}">${svg(S.bookMode==='cal'?'list':'cal')}</button></div>`:''}</header>`;
+    : S.tab==='book'&&S.search!=null ? `<header class="top"><div class="sbar">${svg('search')}<input id="q" type="search" enterkeyhint="search" autocomplete="off" placeholder="가게, 품목, 카테고리, 금액 검색" aria-label="검색"></div><button class="linkbtn" data-act="search-close" style="padding:8px 4px 8px 10px;font-size:15px">취소</button></header>`
+    : `<header class="top">${monthNav}${S.tab==='book'?`<div class="top-actions"><button class="iconbtn" data-act="search-open" aria-label="검색">${svg('search')}</button><button class="iconbtn" data-act="bookmode" aria-label="${S.bookMode==='cal'?'목록으로 보기':'달력으로 보기'}">${svg(S.bookMode==='cal'?'list':'cal')}</button></div>`:''}</header>`;
   const err = S.fbError ? `<div class="example" style="background:var(--chip);color:var(--over)">${esc(S.fbError)}</div>` : '';
-  app.innerHTML = head + err + (S.tab==='home'?homeView():S.tab==='book'?(S.bookMode==='cal'?calendarView():listView()):S.tab==='meal'?mealView():S.tab==='stats'?statsView():settingsView());
+  app.innerHTML = head + err + (S.tab==='home'?homeView():S.tab==='book'?(S.search!=null?'<div id="sr"></div>':S.bookMode==='cal'?calendarView():listView()):S.tab==='meal'?mealView():S.tab==='stats'?statsView():settingsView());
   if(S.tab==='home') bindHome();
+  if(S.tab==='book'&&S.search!=null) bindSearch();
   const wl=$('#wk-lim-in'); if(wl) wl.oninput=e=>{ const v=+e.target.value.replace(/\D/g,''); e.target.value=v?won(v):''; };
   if(S.tab==='settings') bindSettings();
 }
@@ -735,6 +754,38 @@ function drawEvent(){ const names=S.settings.names;
 function bindEvForm(){ const nt=$('#ev-notime'), ti=$('#ev-time'); if(nt&&ti){ nt.onchange=()=>{ ti.disabled=nt.checked; if(nt.checked) ti.value=''; else ti.focus(); }; ti.onchange=()=>{ if(ti.value) nt.checked=false; }; } }
 function readEvForm(){ EV.title=$('#ev-title').value.trim(); EV.date=$('#ev-date').value; EV.noTime=$('#ev-notime').checked; EV.time=EV.noTime?'':$('#ev-time').value; EV.yearly=$('#ev-yearly').checked; EV.memo=$('#ev-memo').value.trim(); }
 function closeEvent(){ EV=null; $('#sheet').hidden=true; document.body.style.overflow=''; render(); }
+
+/* ---------------- 검색 ---------------- */
+function bindSearch(){
+  const q=$('#q'); if(!q) return; q.value=S.search||''; 
+  if(!S.searchFocused){ S.searchFocused=true; setTimeout(()=>q.focus(),30); }
+  q.oninput=()=>{ S.search=q.value; drawSearch(); };
+  q.onkeydown=e=>{ if(e.key==='Enter') q.blur(); };
+  if(S.source==='firebase' && !FireStore.allLoaded){ S.searchLoading=true; FireStore.loadAll().then(()=>{ S.searchLoading=false; drawSearch(); }).catch(()=>{ S.searchLoading=false; S.searchErr=true; drawSearch(); }); }
+  drawSearch();
+}
+function drawSearch(){
+  const box=$('#sr'); if(!box) return;
+  const raw=(S.search||'').trim(), q=raw.toLowerCase().replace(/\s+/g,''), num=raw.replace(/[^\d]/g,'');
+  const note=S.searchLoading?'<div class="small" style="padding:6px 4px">예전 내역까지 불러오는 중…</div>':S.searchErr?'<div class="small" style="padding:6px 4px;color:var(--over)">예전 내역을 불러오지 못했어요. 최근 3개월만 검색돼요.</div>':'';
+  if(!q){ const recent=[...new Set(S.txs.filter(t=>!t.ex&&t.memo).sort((a,b)=>b.date.localeCompare(a.date)).map(t=>t.memo.split(/[\s·/(]/)[0]).filter(w=>w.length>=2))].slice(0,10);
+    box.innerHTML=note+`<div class="empty" style="margin-top:24px">${svg('search')}<div>가게 이름, 품목, 카테고리, 금액으로 찾아보세요.</div><div class="small">예: 쿠팡, 크림치즈, 외식, 42750</div></div>`+
+      (recent.length?`<div class="sugg" style="justify-content:center;padding-top:14px">${recent.map(w=>`<button data-q="${esc(w)}">${esc(w)}</button>`).join('')}</div>`:'');
+    return; }
+  const hit=S.txs.filter(t=>{ if(t.ex) return false;
+    const hay=[t.memo, catInfo(t.cat).label, whoName(t.who)].join(' ').toLowerCase().replace(/\s+/g,'');
+    return hay.includes(q) || (num.length>=3 && String(t.amount).includes(num)); })
+    .sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
+  const out=hit.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0), inc=hit.filter(t=>t.type==='in').reduce((a,t)=>a+t.amount,0);
+  let html=note+`<div class="sres"><b>${hit.length}건</b>${out?` · 지출 <b class="num">${won(out)}원</b>`:''}${inc?` · 입금 <b class="num pos">${won(inc)}원</b>`:''}</div>`;
+  if(!hit.length){ box.innerHTML=html+`<div class="empty" style="margin-top:20px"><div>'${esc(raw)}'에 맞는 내역이 없어요.</div></div>`; return; }
+  const byMonth={}; hit.slice(0,300).forEach(t=>(byMonth[t.date.slice(0,7)]=byMonth[t.date.slice(0,7)]||[]).push(t));
+  for(const m of Object.keys(byMonth)){ const list=byMonth[m], ms=list.filter(t=>t.type==='out').reduce((a,t)=>a+t.amount,0);
+    html+=`<div class="day"><div class="day-h"><span>${monthLabel(m)}</span><span class="num">${ms?'−'+won(ms)+'원':''}</span></div><div class="items">${list.map(t=>{ const d=new Date(t.date+'T00:00');
+      return itemRow(t).replace('<span class="item-t">',`<span class="sdate num">${d.getMonth()+1}/${d.getDate()}</span><span class="item-t">`); }).join('')}</div></div>`; }
+  if(hit.length>300) html+=`<div class="small" style="padding:10px 4px">최근 300건까지만 보여요. 검색어를 더 자세히 적어 주세요.</div>`;
+  box.innerHTML=html;
+}
 
 function listView(){
   const tx=monthTx(S.month).sort((a,b)=>b.date.localeCompare(a.date)||(b.createdAt||0)-(a.createdAt||0));
@@ -1413,6 +1464,7 @@ document.addEventListener('click', async e=>{
   if(d.statwho){ S.statWho = S.statWho===d.statwho ? '' : d.statwho; render(); if(S.statWho) setTimeout(()=>$('#stat-list')?.scrollIntoView({behavior:'smooth',block:'start'}),30); return; }
   if(d.statcat){ S.statCat = S.statCat===d.statcat ? '' : d.statcat; render(); if(S.statCat) setTimeout(()=>$('#stat-list')?.scrollIntoView({behavior:'smooth',block:'start'}),30); return; }
   if(F && d.sdel!==undefined){ F.split.splice(+d.sdel,1); drawSheet(); return; }
+  if(d.q){ S.search=d.q; const q=$('#q'); if(q) q.value=d.q; drawSearch(); return; }
   if(d.edit){ const t=S.txs.find(x=>x.id===d.edit); if(t) openSheet(t); return; }
   if(F && !$('#sheet').hidden){
     if(d.type){ if(F.type!==d.type){ F.type=d.type; F.cat=''; } drawSheet(); return; }
@@ -1427,6 +1479,8 @@ document.addEventListener('click', async e=>{
     case 'add': openSheet(); break;
     case 'scan': $('#f-photo')?.click(); break;
     case 'note-add': addNote(); break;
+    case 'search-open': S.search=''; S.searchFocused=false; render(); break;
+    case 'search-close': S.search=null; render(); break;
     case 'split-on': startSplit(); drawSheet(); break;
     case 'split-off': if(F.split){ F.cat=F.split[0].cat; } F.split=null; drawSheet(); break;
     case 'split-add': F.split.splice(F.split.length-1,0,{cat:'etc', amount:0}); drawSheet(); break;
