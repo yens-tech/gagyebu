@@ -1,5 +1,5 @@
 // 앱 화면을 기기에 저장해 두고, 인터넷이 될 때는 항상 최신 버전을 받아옵니다.
-const CACHE = 'gagyebu-v40';
+const CACHE = 'gagyebu-v41';
 const ASSETS = ['./', './index.html', './config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });
