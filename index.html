@@ -194,6 +194,8 @@ input[type="date"]::-webkit-calendar-picker-indicator{margin:0}
 .scan-msg.ok{color:var(--accent)} .scan-msg.bad{color:var(--over)}
 .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--accent);border-right-color:transparent;animation:sp .8s linear infinite;flex:none}
 @keyframes sp{to{transform:rotate(360deg)}}
+.lim-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;font-size:14px}
+.lim-line b{font-size:16px}
 .mweek{display:grid;gap:8px;margin-top:14px}
 .mday{display:grid;grid-template-columns:52px 1fr;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 10px 10px 12px;align-items:start}
 .mday.today{border-color:var(--accent)}
@@ -329,7 +331,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.10-42';
+const APP_VERSION='2026.11.10-43';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -638,6 +640,21 @@ async function patchNote(id, patch){ const n=(S.notes||[]).find(x=>x.id===id); i
 
 /* ---------------- 주간 식단 ---------------- */
 const SLOT={b:'아침', l:'점심', d:'저녁'};
+const FOOD_CATS=['food','delivery','conv','alcohol'];
+function weekFood(from){ const e=new Date(from+'T00:00'); e.setDate(e.getDate()+6); const to=ymd(e);
+  return S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&FOOD_CATS.includes(t.cat)).reduce((a,t)=>a+t.amount,0); }
+// 주의 '달'은 그 주 월요일이 속한 달. 달이 바뀌면 초과분은 리셋돼요.
+function weekLimit(from){
+  const base=+S.settings.weeklyFood||0, month=from.slice(0,7);
+  const d=new Date(month+'-01T00:00'); while(d.getDay()!==1) d.setDate(d.getDate()+1);
+  let debt=0, info=null;
+  while(true){ const k=ymd(d); if(k.slice(0,7)!==month) break;
+    const adj=Math.max(0, base-debt), spent=weekFood(k), newDebt=Math.max(0, debt-base)+Math.max(0, spent-adj);
+    if(k===from){ const nx=new Date(d); nx.setDate(nx.getDate()+7); const nextReset=ymd(nx).slice(0,7)!==month;
+      info={adj, carried:base-adj, debtOut:newDebt, nextAdj:Math.max(0, base-newDebt), nextReset}; break; }
+    debt=newDebt; d.setDate(d.getDate()+7); }
+  return info||{adj:base, carried:0, debtOut:0, nextAdj:base, nextReset:false};
+}
 function weekStart(d){ const x=new Date(d); const dow=(x.getDay()+6)%7; x.setDate(x.getDate()-dow); x.setHours(0,0,0,0); return x; }
 function curWeek(){ if(!S.week) S.week=ymd(weekStart(new Date())); return S.week; }
 function weekDays(){ const s=new Date(curWeek()+'T00:00'); return [...Array(7)].map((_,i)=>{ const d=new Date(s); d.setDate(s.getDate()+i); return d; }); }
@@ -645,12 +662,15 @@ function weekLabel(){ const ds=weekDays(), a=ds[0], b=ds[6]; return `${a.getMont
 function slotsFor(d){ return ['b','l','d']; }
 function mealView(){
   const days=weekDays(), today=ymd(new Date()), from=ymd(days[0]), to=ymd(days[6]);
-  const food=S.txs.filter(t=>!t.ex&&t.type==='out'&&t.date>=from&&t.date<=to&&['food','delivery','conv','alcohol'].includes(t.cat)).reduce((a,t)=>a+t.amount,0);
-  const lim=+S.settings.weeklyFood||0, pct=lim?Math.min(100,food/lim*100):0;
+  const food=weekFood(from);
+  const base=+S.settings.weeklyFood||0, W=weekLimit(from), lim=W.adj, pct=lim?Math.min(100,food/lim*100):(food?100:0);
   let html=`<section class="sum" style="gap:10px"><div style="display:flex;justify-content:space-between;align-items:end;gap:8px">
       <div><div class="sum-label">이번 주 식비 <span class="small">(식비·외식·배달·편의점)</span></div><div class="sum-big num" style="font-size:26px">${won(food)}<small>원</small></div></div>
-      <button class="btn" data-act="wk-limit" style="padding:8px 12px;font-size:13px">${lim?'한도 '+short(lim):'한도 정하기'}</button></div>
-    ${lim?`<div class="bar ${food>lim?'over':pct>=80?'warn':''}"><i style="width:${pct}%"></i></div><div class="hint">${food>lim?`한도보다 <b class="num neg">${won(food-lim)}원</b> 더 썼어요`:`이번 주 <b class="num">${won(lim-food)}원</b> 남았어요`}</div>`:''}
+      <button class="btn" data-act="wk-limit" style="padding:8px 12px;font-size:13px">${base?'기본 한도 '+short(base):'한도 정하기'}</button></div>
+    ${base?`<div class="lim-line"><span>이번 주 한도</span><b class="num ${W.carried?'neg':''}">${won(lim)}원</b>${W.carried?`<span class="small">기본 ${won(base)} − 지난주까지 초과 ${won(W.carried)}</span>`:''}</div>
+    <div class="bar ${food>lim?'over':pct>=80?'warn':''}"><i style="width:${pct}%"></i></div>
+    <div class="hint">${food>lim?`한도보다 <b class="num neg">${won(food-lim)}원</b> 더 썼어요`:`이번 주 <b class="num">${won(lim-food)}원</b> 남았어요`}</div>
+    ${food>lim||W.debtOut?`<div class="small">${W.nextReset?'다음 주는 새 달이라 원래 한도로 다시 시작해요.':`초과한 만큼 다음 주 한도가 <b class="num">${won(W.nextAdj)}원</b>으로 줄어요.`}</div>`:''}`:''}
     ${S.limEdit?`<div class="two"><input class="inp num" id="wk-lim-in" inputmode="numeric" value="${lim?won(lim):''}" placeholder="예: 100,000"><button class="btn primary" data-act="wk-limit-save">저장</button></div>`:''}</section>`;
   html+=`<div class="mweek">`;
   for(const d of days){ const key=ymd(d), m=S.meals[key]||{date:key, meals:{}}, dow=d.getDay();
