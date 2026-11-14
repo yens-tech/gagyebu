@@ -339,7 +339,7 @@ select.inp{-webkit-appearance:none;appearance:none;background-image:none}
 <div class="toast" id="toast" hidden></div>
 
 <script>
-const APP_VERSION='2026.11.10-45';
+const APP_VERSION='2026.11.14-46';
 const THEME_LS='gagyebu.theme';
 function applyTheme(){ let t='light'; try{ t=localStorage.getItem(THEME_LS)||'light'; }catch(e){}
   if(t==='auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=t; return t; }
@@ -606,7 +606,7 @@ function calendarView(){
   let html=miniSummary()+`<section class="cal2">${weeks}</section>`;
   const evs=eventsOn(S.selDay);
   html+=`<div class="day"><div class="day-h"><span>${sd.getMonth()+1}월 ${sd.getDate()}일 일정</span><button class="linkbtn" data-act="ev-add">+ 일정 추가</button></div>
-    ${evs.length?`<div class="items">${evs.map(evRow).join('')}</div>`:`<div class="small" style="padding:2px 4px 4px">일정이 없어요.</div>`}</div>`;
+    ${evs.length?`<div class="items">${evs.map(e=>evRow(e)).join('')}</div>`:`<div class="small" style="padding:2px 4px 4px">일정이 없어요.</div>`}</div>`;
   html+=`<div class="day"><div class="day-h"><span>${sd.getMonth()+1}월 ${sd.getDate()}일 ${DOW[sd.getDay()]}요일 내역</span><span class="num">${si?`<span class="pos">+${won(si)}원</span> `:''}${so?'−'+won(so)+'원':''}</span></div>`;
   html+= sel.length ? `<div class="items">${sel.map(itemRow).join('')}</div>` : `<div class="empty" style="margin-top:14px"><div>이날은 기록이 없어요.</div><div class="small">아래 가계부 등록을 누르면 이 날짜로 입력돼요.</div></div>`;
   return html+'</div>';
@@ -736,7 +736,7 @@ function evRow(e, date){ const dt=new Date((date||e.date)+'T00:00');
     <span class="item-t"><b>${esc(e.title)}</b><span>${date?`${dt.getMonth()+1}/${dt.getDate()} (${DOW[dt.getDay()]}) · `:''}${e.time?esc(e.time)+' · ':'시간 미정 · '}<span class="who">${esc(whoName(e.who||'us'))}</span>${e.yearly?'🔁 매년':''}${e.memo?' · '+esc(e.memo):''}</span></span>
     ${date?`<span class="amt small" style="color:var(--accent);font-weight:600">${dLabel(date)}</span>`:''}</button>`; }
 let EV=null;
-function openEvent(e, date){ EV=e?{...e, isEdit:true}:{id:uid(), date:date||ymd(new Date()), time:'', title:'', who:'us', yearly:false, memo:'', remind:true}; EV.noTime=!!(e && !e.time); EV.armed=false; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawEvent(); setTimeout(()=>{ if(!EV.isEdit) $('#ev-title')?.focus(); },50); }
+function openEvent(e, date){ EV=e?{...e, isEdit:true}:{id:uid(), date:date||ymd(new Date()), time:'', title:'', who:'us', yearly:false, memo:'', remind:true}; EV.noTime=!!(e && !e.time); EV.armed=false; $('#sheet').hidden=false; document.body.style.overflow='hidden'; drawEvent(); setTimeout(()=>{ if(EV && !EV.isEdit) $('#ev-title')?.focus(); },50); }
 function drawEvent(){ const names=S.settings.names;
   $('#sheet').innerHTML=`<div class="sheet-in"><div class="sheet-top"><span></span><div class="cap-h">${EV.isEdit?'일정 고치기':'일정 추가'}</div><button class="iconbtn" data-act="ev-close" aria-label="닫기">${svg('close')}</button></div>
     <div class="card" style="margin-top:6px">
